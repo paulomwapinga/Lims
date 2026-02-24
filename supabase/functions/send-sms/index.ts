@@ -61,7 +61,17 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const credentials = btoa(`${api_key}:${secret_key}`);
+    let actualSecret = secret_key;
+
+    if (secret_key.endsWith('==') || secret_key.endsWith('=')) {
+      try {
+        actualSecret = atob(secret_key);
+      } catch (e) {
+        console.error('Failed to decode secret key:', e);
+      }
+    }
+
+    const credentials = btoa(`${api_key}:${actualSecret}`);
 
     const response = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
