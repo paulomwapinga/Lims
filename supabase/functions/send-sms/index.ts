@@ -61,7 +61,14 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const credentials = btoa(`${api_key}:${secret_key}`);
+    let decodedSecret = secret_key;
+    try {
+      decodedSecret = atob(secret_key);
+    } catch {
+      decodedSecret = secret_key;
+    }
+
+    const credentials = btoa(`${api_key}:${decodedSecret}`);
 
     const response = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
