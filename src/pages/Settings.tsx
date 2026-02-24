@@ -56,6 +56,7 @@ export default function Settings() {
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [addingUnit, setAddingUnit] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
 
   useEffect(() => {
     loadSettings();
@@ -377,6 +378,47 @@ export default function Settings() {
     setSettings((prev) => ({ ...prev, signature_image: '' }));
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Please upload an image file');
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Image size should be less than 2MB');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64String = event.target?.result as string;
+        setSettings((prev) => ({ ...prev, clinic_logo_url: base64String }));
+        setUploadingLogo(false);
+      };
+      reader.onerror = () => {
+        alert('Failed to read file');
+        setUploadingLogo(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      alert(`Failed to upload logo: ${error.message}`);
+      setUploadingLogo(false);
+    }
+  };
+
+  const handleRemoveLogo = () => {
+    if (!confirm('Are you sure you want to remove the logo?')) {
+      return;
+    }
+    setSettings((prev) => ({ ...prev, clinic_logo_url: '' }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -495,44 +537,95 @@ export default function Settings() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Logo URL
+                  Clinic Logo
                 </label>
-                <div className="flex items-start space-x-3">
-                  <div className="flex-1">
-                    <input
-                      type="text"
-                      value={settings.clinic_logo_url}
-                      onChange={(e) => handleChange('clinic_logo_url', e.target.value)}
-                      disabled={!isAdmin}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                      placeholder="e.g., /logo.png"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Enter the path to your logo image (e.g., /logo.png)
-                    </p>
-                  </div>
-                  {settings.clinic_logo_url && (
-                    <div className="flex-shrink-0">
-                      <img
-                        src={settings.clinic_logo_url}
-                        alt="Clinic Logo Preview"
-                        className="h-16 w-auto object-contain border border-gray-200 rounded-md p-2"
-                        onError={(e) => {
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
+                <p className="text-sm text-gray-500 mb-3">
+                  Upload a logo image or enter a URL to be displayed on receipts and reports
+                </p>
+                <div className="space-y-4">
+                  {settings.clinic_logo_url ? (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-gray-700 mb-2">Current Logo</p>
+                          <div className="bg-white border border-gray-300 rounded-lg p-4 inline-block">
+                            <img
+                              src={settings.clinic_logo_url}
+                              alt="Clinic Logo"
+                              className="max-h-24 max-w-xs object-contain"
+                              onError={(e) => {
+                                e.currentTarget.src = '/20260201_200954.jpg';
+                              }}
+                            />
+                          </div>
+                        </div>
+                        {isAdmin && (
+                          <button
+                            onClick={handleRemoveLogo}
+                            className="ml-4 text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50 transition-colors"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                      <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500">No logo uploaded</p>
+                    </div>
+                  )}
+
+                  {isAdmin && (
+                    <div className="space-y-3">
+                      <label className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploadingLogo ? 'Uploading...' : settings.clinic_logo_url ? 'Change Logo' : 'Upload Logo'}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleLogoUpload}
+                          disabled={uploadingLogo}
+                          className="hidden"
+                        />
+                      </label>
+                      <p className="text-xs text-gray-500">
+                        Supported formats: PNG, JPG, GIF. Maximum size: 2MB
+                      </p>
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <p className="text-sm text-blue-800">
+                          After uploading, click the "Save Changes" button at the top to save your logo.
+                        </p>
+                      </div>
+                      <details className="mt-3">
+                        <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
+                          Or enter a logo URL manually
+                        </summary>
+                        <div className="mt-3">
+                          <input
+                            type="text"
+                            value={settings.clinic_logo_url}
+                            onChange={(e) => handleChange('clinic_logo_url', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g., /logo.png or https://example.com/logo.png"
+                          />
+                          <p className="text-xs text-gray-500 mt-1">
+                            Enter the path or URL to your logo image
+                          </p>
+                        </div>
+                      </details>
+                    </div>
+                  )}
+
+                  {!isAdmin && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <p className="text-sm text-yellow-800">
+                        Only administrators can upload or change the logo.
+                      </p>
                     </div>
                   )}
                 </div>
               </div>
-
-              {!isAdmin && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    Only administrators can modify clinic information settings.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
 
