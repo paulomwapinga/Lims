@@ -45,11 +45,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const cleanPhone = phone.replace(/[^0-9]/g, "");
+    let cleanPhone = phone.replace(/[^0-9]/g, "");
+
+    if (cleanPhone.startsWith("0")) {
+      cleanPhone = "255" + cleanPhone.substring(1);
+    }
 
     if (!cleanPhone.startsWith("255")) {
       return new Response(
-        JSON.stringify({ error: "Phone number must start with 255 (Tanzania)" }),
+        JSON.stringify({ error: "Phone number must be a valid Tanzania number" }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
