@@ -21,6 +21,8 @@ interface SmsSettings {
   sms_secret_key: string;
   sms_source_addr: string;
   sms_template: string;
+  welcome_sms_enabled: boolean;
+  welcome_sms_template: string;
 }
 
 interface Unit {
@@ -47,6 +49,8 @@ export default function Settings() {
     sms_secret_key: '',
     sms_source_addr: '',
     sms_template: 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
+    welcome_sms_enabled: false,
+    welcome_sms_template: 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -110,7 +114,7 @@ export default function Settings() {
     try {
       const { data, error } = await supabase
         .from('facility_settings')
-        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template')
+        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template, welcome_sms_enabled, welcome_sms_template')
         .limit(1)
         .maybeSingle();
 
@@ -123,6 +127,8 @@ export default function Settings() {
           sms_secret_key: data.sms_secret_key || '',
           sms_source_addr: data.sms_source_addr || '',
           sms_template: data.sms_template || 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
+          welcome_sms_enabled: data.welcome_sms_enabled || false,
+          welcome_sms_template: data.welcome_sms_template || 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
         });
       }
     } catch (error: any) {
@@ -153,6 +159,8 @@ export default function Settings() {
             sms_secret_key: smsSettings.sms_secret_key,
             sms_source_addr: smsSettings.sms_source_addr,
             sms_template: smsSettings.sms_template,
+            welcome_sms_enabled: smsSettings.welcome_sms_enabled,
+            welcome_sms_template: smsSettings.welcome_sms_template,
           })
           .eq('id', existingSettings.id);
 
@@ -166,6 +174,8 @@ export default function Settings() {
             sms_secret_key: smsSettings.sms_secret_key,
             sms_source_addr: smsSettings.sms_source_addr,
             sms_template: smsSettings.sms_template,
+            welcome_sms_enabled: smsSettings.welcome_sms_enabled,
+            welcome_sms_template: smsSettings.welcome_sms_template,
           });
 
         if (error) throw error;
@@ -800,7 +810,7 @@ export default function Settings() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  SMS Message Template
+                  Test Results SMS Template
                 </label>
                 <textarea
                   value={smsSettings.sms_template}
@@ -816,12 +826,56 @@ export default function Settings() {
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-blue-900 mb-2">How it works:</p>
+                <p className="text-sm font-semibold text-blue-900 mb-2">Test Results SMS - How it works:</p>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                   <li>Lab technician enters test results and marks as completed</li>
                   <li>System automatically sends SMS to patient's phone number</li>
                   <li>Patient receives notification that results are ready</li>
                 </ol>
+              </div>
+
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <h3 className="text-md font-semibold text-gray-900 mb-4">Welcome SMS</h3>
+
+                <div className="flex items-center mb-4">
+                  <input
+                    type="checkbox"
+                    id="welcome_sms_enabled"
+                    checked={smsSettings.welcome_sms_enabled}
+                    onChange={(e) => setSmsSettings({ ...smsSettings, welcome_sms_enabled: e.target.checked })}
+                    disabled={!isAdmin}
+                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
+                  />
+                  <label htmlFor="welcome_sms_enabled" className="ml-2 block text-sm font-medium text-gray-700">
+                    Send Welcome SMS to New Patients
+                  </label>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Welcome SMS Template
+                  </label>
+                  <textarea
+                    value={smsSettings.welcome_sms_template}
+                    onChange={(e) => setSmsSettings({ ...smsSettings, welcome_sms_template: e.target.value })}
+                    disabled={!isAdmin}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                    placeholder="Enter welcome SMS message template"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Available placeholders: [PATIENT_NAME], [CLINIC_NAME]
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
+                  <p className="text-sm font-semibold text-blue-900 mb-2">Welcome SMS - How it works:</p>
+                  <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                    <li>New patient is registered in the system</li>
+                    <li>System automatically sends welcome SMS to patient's phone number</li>
+                    <li>Patient receives a welcome message from the clinic</li>
+                  </ol>
+                </div>
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
