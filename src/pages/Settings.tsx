@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, FileSignature } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, FileSignature, MessageSquare } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import InterpretationRulesManager from '../components/InterpretationRulesManager';
@@ -13,6 +13,14 @@ interface ClinicSettings {
   clinic_website: string;
   currency: string;
   signature_image: string;
+}
+
+interface SmsSettings {
+  sms_enabled: boolean;
+  sms_api_key: string;
+  sms_secret_key: string;
+  sms_source_addr: string;
+  sms_template: string;
 }
 
 interface Unit {
@@ -33,8 +41,16 @@ export default function Settings() {
     currency: 'TSh',
     signature_image: '',
   });
+  const [smsSettings, setSmsSettings] = useState<SmsSettings>({
+    sms_enabled: false,
+    sms_api_key: '',
+    sms_secret_key: '',
+    sms_source_addr: '',
+    sms_template: 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
+  });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingSms, setSavingSms] = useState(false);
   const [units, setUnits] = useState<Unit[]>([]);
   const [newUnit, setNewUnit] = useState({ name: '', description: '' });
   const [showAddUnit, setShowAddUnit] = useState(false);
@@ -43,6 +59,7 @@ export default function Settings() {
 
   useEffect(() => {
     loadSettings();
+    loadSmsSettings();
     loadUnits();
   }, []);
 
@@ -85,6 +102,80 @@ export default function Settings() {
       alert(`Failed to load settings: ${error.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadSmsSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('facility_settings')
+        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setSmsSettings({
+          sms_enabled: data.sms_enabled || false,
+          sms_api_key: data.sms_api_key || '',
+          sms_secret_key: data.sms_secret_key || '',
+          sms_source_addr: data.sms_source_addr || '',
+          sms_template: data.sms_template || 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
+        });
+      }
+    } catch (error: any) {
+      console.error('Error loading SMS settings:', error);
+    }
+  };
+
+  const handleSaveSms = async () => {
+    if (profile?.role !== 'admin') {
+      alert('Only administrators can update SMS settings');
+      return;
+    }
+
+    setSavingSms(true);
+    try {
+      const { data: existingSettings } = await supabase
+        .from('facility_settings')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      if (existingSettings) {
+        const { error } = await supabase
+          .from('facility_settings')
+          .update({
+            sms_enabled: smsSettings.sms_enabled,
+            sms_api_key: smsSettings.sms_api_key,
+            sms_secret_key: smsSettings.sms_secret_key,
+            sms_source_addr: smsSettings.sms_source_addr,
+            sms_template: smsSettings.sms_template,
+          })
+          .eq('id', existingSettings.id);
+
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('facility_settings')
+          .insert({
+            sms_enabled: smsSettings.sms_enabled,
+            sms_api_key: smsSettings.sms_api_key,
+            sms_secret_key: smsSettings.sms_secret_key,
+            sms_source_addr: smsSettings.sms_source_addr,
+            sms_template: smsSettings.sms_template,
+          });
+
+        if (error) throw error;
+      }
+
+      alert('SMS settings saved successfully');
+    } catch (error: any) {
+      console.error('Error saving SMS settings:', error);
+      alert(`Failed to save SMS settings: ${error.message}`);
+    } finally {
+      setSavingSms(false);
     }
   };
 
@@ -527,6 +618,132 @@ export default function Settings() {
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-sm text-yellow-800">
                     Only administrators can upload or change the signature.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="border-t border-gray-200 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center space-x-2">
+                <MessageSquare className="w-5 h-5 text-gray-700" />
+                <h2 className="text-lg font-semibold text-gray-900">SMS Notifications</h2>
+              </div>
+              {isAdmin && (
+                <button
+                  onClick={handleSaveSms}
+                  disabled={savingSms}
+                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400"
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  {savingSms ? 'Saving...' : 'Save SMS Settings'}
+                </button>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Configure SMS notifications to alert patients when their lab results are ready (via Beem Africa)
+            </p>
+
+            <div className="space-y-4">
+              <div className="flex items-center">
+                <input
+                  type="checkbox"
+                  id="sms_enabled"
+                  checked={smsSettings.sms_enabled}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_enabled: e.target.checked })}
+                  disabled={!isAdmin}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
+                />
+                <label htmlFor="sms_enabled" className="ml-2 block text-sm font-medium text-gray-700">
+                  Enable SMS Notifications
+                </label>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  API Key
+                </label>
+                <input
+                  type="text"
+                  value={smsSettings.sms_api_key}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_api_key: e.target.value })}
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
+                  placeholder="Enter Beem Africa API Key"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Secret Key
+                </label>
+                <input
+                  type="password"
+                  value={smsSettings.sms_secret_key}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_secret_key: e.target.value })}
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
+                  placeholder="Enter Beem Africa Secret Key"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Source Address (Sender ID)
+                </label>
+                <input
+                  type="text"
+                  value={smsSettings.sms_source_addr}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_source_addr: e.target.value })}
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="e.g., CLINIC"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  The sender name that will appear to recipients
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  SMS Message Template
+                </label>
+                <textarea
+                  value={smsSettings.sms_template}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_template: e.target.value })}
+                  disabled={!isAdmin}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                  placeholder="Enter SMS message template"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Available placeholders: [PATIENT_NAME], [TEST_NAME]
+                </p>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-blue-900 mb-2">How it works:</p>
+                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                  <li>Lab technician enters test results and marks as completed</li>
+                  <li>System automatically sends SMS to patient's phone number</li>
+                  <li>Patient receives notification that results are ready</li>
+                </ol>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="text-sm font-semibold text-yellow-900 mb-1">Important Notes:</p>
+                <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
+                  <li>Patient phone numbers must start with 255 (Tanzania)</li>
+                  <li>SMS credits must be purchased from Beem Africa</li>
+                  <li>Get your API credentials from <a href="https://beem.africa" target="_blank" rel="noopener noreferrer" className="underline font-medium">beem.africa</a></li>
+                </ul>
+              </div>
+
+              {!isAdmin && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    Only administrators can modify SMS notification settings.
                   </p>
                 </div>
               )}
