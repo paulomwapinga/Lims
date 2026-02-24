@@ -66,12 +66,17 @@ Deno.serve(async (req: Request) => {
     if (secret_key.endsWith('==') || secret_key.endsWith('=')) {
       try {
         actualSecret = atob(secret_key);
+        console.log('Decoded secret key (base64 -> plain)');
       } catch (e) {
         console.error('Failed to decode secret key:', e);
       }
     }
 
     const credentials = btoa(`${api_key}:${actualSecret}`);
+
+    console.log('API Key (first 10):', api_key.substring(0, 10));
+    console.log('Secret decoded:', actualSecret !== secret_key);
+    console.log('Credentials length:', credentials.length);
 
     const response = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
