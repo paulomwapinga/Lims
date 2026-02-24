@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, FileSignature, MessageSquare } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, FileSignature, MessageSquare, Send } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import InterpretationRulesManager from '../components/InterpretationRulesManager';
@@ -61,6 +61,8 @@ export default function Settings() {
   const [addingUnit, setAddingUnit] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [testingSms, setTestingSms] = useState(false);
+  const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
     loadSettings();
@@ -187,6 +189,51 @@ export default function Settings() {
       alert(`Failed to save SMS settings: ${error.message}`);
     } finally {
       setSavingSms(false);
+    }
+  };
+
+  const handleTestSms = async () => {
+    if (!testPhone.trim()) {
+      alert('Please enter a phone number to test');
+      return;
+    }
+
+    if (!smsSettings.sms_api_key || !smsSettings.sms_secret_key || !smsSettings.sms_source_addr) {
+      alert('Please configure SMS credentials first');
+      return;
+    }
+
+    setTestingSms(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          phone: testPhone,
+          message: 'This is a test SMS from your medical laboratory system.',
+          api_key: smsSettings.sms_api_key,
+          secret_key: smsSettings.sms_secret_key,
+          source_addr: smsSettings.sms_source_addr,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert('Test SMS sent successfully!');
+        setTestPhone('');
+      } else {
+        alert(`Failed to send test SMS: ${result.error}\n${result.details ? JSON.stringify(result.details, null, 2) : ''}`);
+      }
+    } catch (error: any) {
+      console.error('Error sending test SMS:', error);
+      alert(`Failed to send test SMS: ${error.message}`);
+    } finally {
+      setTestingSms(false);
     }
   };
 
@@ -878,10 +925,35 @@ export default function Settings() {
                 </div>
               </div>
 
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <div className="border-t border-gray-200 pt-6 mt-6">
+                <h3 className="text-md font-semibold text-gray-900 mb-4">Test SMS Configuration</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Send a test SMS to verify your credentials are working correctly.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    placeholder="Enter phone number (e.g., 0794100044)"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={testingSms || !isAdmin}
+                  />
+                  <button
+                    onClick={handleTestSms}
+                    disabled={testingSms || !isAdmin}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2"
+                  >
+                    <Send className="h-4 w-4" />
+                    <span>{testingSms ? 'Sending...' : 'Send Test SMS'}</span>
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-6">
                 <p className="text-sm font-semibold text-yellow-900 mb-1">Important Notes:</p>
                 <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-                  <li>Patient phone numbers must start with 255 (Tanzania)</li>
+                  <li>Patient phone numbers can start with 0 or 255 (Tanzania)</li>
                   <li>SMS credits must be purchased from Beem Africa</li>
                   <li>Get your API credentials from <a href="https://beem.africa" target="_blank" rel="noopener noreferrer" className="underline font-medium">beem.africa</a></li>
                 </ul>
