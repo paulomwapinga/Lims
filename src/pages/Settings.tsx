@@ -69,18 +69,16 @@ export default function Settings() {
   useEffect(() => {
     const loadAllSettings = async () => {
       try {
-        const { data: settingsData, error: settingsError } = await supabase
-          .from('settings')
-          .select('*');
+        const [settingsResult, unitsResult] = await Promise.all([
+          supabase.from('settings').select('*'),
+          supabase.from('units').select('*').order('name')
+        ]);
 
-        if (settingsError) throw settingsError;
+        if (settingsResult.error) throw settingsResult.error;
+        if (unitsResult.error) throw unitsResult.error;
 
-        const { data: unitsData, error: unitsError } = await supabase
-          .from('units')
-          .select('*')
-          .order('name');
-
-        if (unitsError) throw unitsError;
+        const settingsData = settingsResult.data;
+        const unitsData = unitsResult.data;
 
         const settingsMap: any = {};
         let signatureImage = '';
