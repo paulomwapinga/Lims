@@ -23,6 +23,7 @@ interface SmsSettings {
   sms_template: string;
   welcome_sms_enabled: boolean;
   welcome_sms_template: string;
+  service_role_key: string;
 }
 
 interface Unit {
@@ -51,6 +52,7 @@ export default function Settings() {
     sms_template: 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
     welcome_sms_enabled: false,
     welcome_sms_template: 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
+    service_role_key: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -116,7 +118,7 @@ export default function Settings() {
     try {
       const { data, error } = await supabase
         .from('facility_settings')
-        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template, welcome_sms_enabled, welcome_sms_template')
+        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template, welcome_sms_enabled, welcome_sms_template, service_role_key')
         .limit(1)
         .maybeSingle();
 
@@ -131,6 +133,7 @@ export default function Settings() {
           sms_template: data.sms_template || 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
           welcome_sms_enabled: data.welcome_sms_enabled || false,
           welcome_sms_template: data.welcome_sms_template || 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
+          service_role_key: data.service_role_key || '',
         });
       }
     } catch (error: any) {
@@ -163,6 +166,7 @@ export default function Settings() {
             sms_template: smsSettings.sms_template,
             welcome_sms_enabled: smsSettings.welcome_sms_enabled,
             welcome_sms_template: smsSettings.welcome_sms_template,
+            service_role_key: smsSettings.service_role_key,
           })
           .eq('id', existingSettings.id);
 
@@ -178,6 +182,7 @@ export default function Settings() {
             sms_template: smsSettings.sms_template,
             welcome_sms_enabled: smsSettings.welcome_sms_enabled,
             welcome_sms_template: smsSettings.welcome_sms_template,
+            service_role_key: smsSettings.service_role_key,
           });
 
         if (error) throw error;
@@ -852,6 +857,23 @@ export default function Settings() {
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   The sender name that will appear to recipients
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Supabase Service Role Key
+                </label>
+                <input
+                  type="password"
+                  value={smsSettings.service_role_key}
+                  onChange={(e) => setSmsSettings({ ...smsSettings, service_role_key: e.target.value })}
+                  disabled={!isAdmin}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
+                  placeholder="Enter Supabase Service Role Key"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Required for automatic SMS triggers. Find this in your Supabase project settings under API.
                 </p>
               </div>
 
