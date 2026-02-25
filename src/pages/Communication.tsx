@@ -82,7 +82,6 @@ export default function Communication() {
   });
 
   useEffect(() => {
-    const abortController = new AbortController();
     let mounted = true;
 
     const initializeData = async () => {
@@ -108,7 +107,6 @@ export default function Communication() {
 
     return () => {
       mounted = false;
-      abortController.abort();
     };
   }, [activeTab]);
 

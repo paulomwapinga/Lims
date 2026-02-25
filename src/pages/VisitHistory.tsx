@@ -39,15 +39,13 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
   const [totalPatients, setTotalPatients] = useState(0);
 
   useEffect(() => {
-    const abortController = new AbortController();
     let mounted = true;
 
     const loadAllData = async () => {
       try {
         const patientsPromise = supabase
           .from('patients')
-          .select('*', { count: 'exact', head: true })
-          .abortSignal(abortController.signal);
+          .select('*', { count: 'exact', head: true });
 
         const visitsPromise = supabase
           .from('visits')
@@ -65,8 +63,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             users(name)
           `
           )
-          .order('created_at', { ascending: false })
-          .abortSignal(abortController.signal);
+          .order('created_at', { ascending: false });
 
         const [patientsResult, visitsResult] = await Promise.all([
           patientsPromise,
@@ -91,8 +88,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
         const { data: allVisitTests } = await supabase
           .from('visit_tests')
           .select('visit_id, results_status')
-          .in('visit_id', visitIds)
-          .abortSignal(abortController.signal);
+          .in('visit_id', visitIds);
 
         if (!mounted) return;
 
@@ -130,7 +126,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
         setVisits(visitsWithTests);
       } catch (error: any) {
-        if (!mounted || error.name === 'AbortError') {
+        if (!mounted) {
           return;
         }
         console.error('Error loading visits:', error);
@@ -145,7 +141,6 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
     return () => {
       mounted = false;
-      abortController.abort();
     };
   }, []);
 

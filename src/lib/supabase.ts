@@ -12,14 +12,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     autoRefreshToken: true,
   },
-  global: {
-    fetch: (url, options = {}) => {
-      return fetch(url, {
-        ...options,
-        signal: AbortSignal.timeout(15000),
-      });
-    },
-  },
 });
 
 export async function checkSupabaseConnection(): Promise<{
