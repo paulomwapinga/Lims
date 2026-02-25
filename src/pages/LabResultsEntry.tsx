@@ -36,6 +36,7 @@ interface VisitTestInfo {
     patient: {
       id: string;
       name: string;
+      phone: string | null;
     };
     doctor: {
       id: string;
@@ -113,7 +114,7 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
             created_at,
             patient_id,
             doctor_id,
-            patients(id, name),
+            patients(id, name, phone),
             users!visits_doctor_id_fkey(id, name)
           `)
           .eq('id', visitTestData.visit_id)
@@ -142,7 +143,8 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           created_at: visitData.data?.created_at || '',
           patient: {
             id: (visitData.data?.patients as any)?.id || '',
-            name: (visitData.data?.patients as any)?.name || 'Unknown'
+            name: (visitData.data?.patients as any)?.name || 'Unknown',
+            phone: (visitData.data?.patients as any)?.phone || null
           },
           doctor: {
             id: (visitData.data?.users as any)?.id || '',
@@ -391,6 +393,66 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           .insert(notificationsToInsert);
 
         if (notifError) throw notifError;
+
+        const { data: settings } = await supabase
+          .from('settings')
+          .select('key, value');
+
+        const settingsMap: Record<string, string> = {};
+        if (settings) {
+          settings.forEach(s => {
+            settingsMap[s.key] = s.value;
+          });
+        }
+
+        const smsEnabled = settingsMap.sms_enabled === 'true';
+        const apiKey = settingsMap.sms_api_key;
+        const secretKey = settingsMap.sms_secret_key;
+        const sourceAddr = settingsMap.sms_source_addr;
+        const completionMessage = settingsMap.sms_completion_message || 'Hello {patient_name}, your {test_name} results are ready. Please visit the clinic.';
+
+        if (smsEnabled && apiKey && secretKey && sourceAddr && visitTest.visit.patient.phone) {
+          const message = completionMessage
+            .replace('{patient_name}', visitTest.visit.patient.name)
+            .replace('{test_name}', visitTest.test.name);
+
+          try {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                phone: visitTest.visit.patient.phone,
+                message: message,
+                api_key: apiKey,
+                secret_key: secretKey,
+                source_addr: sourceAddr
+              })
+            });
+
+            const result = await response.json();
+
+            const { error: logError } = await supabase
+              .from('sms_logs')
+              .insert({
+                recipient_type: 'patient',
+                recipient_id: visitTest.visit.patient.id,
+                phone_number: visitTest.visit.patient.phone,
+                message: message,
+                status: response.ok ? 'sent' : 'failed',
+                error_message: response.ok ? null : (result.error || 'Unknown error'),
+                sent_by: user.id,
+                sent_at: response.ok ? now : null
+              });
+
+            if (logError) console.error('Error logging SMS:', logError);
+          } catch (smsError) {
+            console.error('Error sending SMS:', smsError);
+          }
+        }
 
         alert('Results successfully sent to doctor and admin!');
 
