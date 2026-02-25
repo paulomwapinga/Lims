@@ -89,8 +89,8 @@ Deno.serve(async (req: Request) => {
       throw new Error("User profile not found");
     }
 
-    if (userProfile.role !== "admin" && userProfile.role !== "doctor") {
-      throw new Error(`Unauthorized: Only admins and doctors can send SMS (current role: ${userProfile.role})`);
+    if (userProfile.role !== "admin" && userProfile.role !== "doctor" && userProfile.role !== "lab_tech") {
+      throw new Error(`Unauthorized: Only admins, doctors, and lab technicians can send SMS (current role: ${userProfile.role})`);
     }
 
     const { visit_test_id } = await req.json();
