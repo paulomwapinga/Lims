@@ -25,31 +25,29 @@ Deno.serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "").trim();
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
-    if (!supabaseUrl || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing Supabase environment variables");
     }
 
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: { Authorization: authHeader },
-      },
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
+        autoRefreshToken: false,
         persistSession: false,
-      },
+      }
     });
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
 
-    if (userError || !user) {
-      console.error("Auth error:", userError);
+    if (authError || !user) {
+      console.error("Auth error:", authError);
       throw new Error("Invalid JWT");
     }
 
     console.log("User authenticated:", user.id);
 
-    const { data: userProfile, error: profileError } = await supabase
+    const { data: userProfile, error: profileError } = await adminClient
       .from("users")
       .select("role")
       .eq("id", user.id)
@@ -73,17 +71,6 @@ Deno.serve(async (req: Request) => {
     if (!visit_test_id) {
       throw new Error("Missing visit_test_id");
     }
-
-    const adminClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-        }
-      }
-    );
 
     const { data: visitTest, error: visitTestError } = await adminClient
       .from("visit_tests")
