@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Edit, Send, Trash2 } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Edit, Send, Trash2, MessageSquare } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -14,6 +14,7 @@ interface VisitTest {
   results_entered_at: string | null;
   technician_notes: string | null;
   sent_to_doctor_at: string | null;
+  sms_sent_at: string | null;
   created_at: string;
   visit: {
     id: string;
@@ -22,6 +23,7 @@ interface VisitTest {
     patient: {
       id: string;
       name: string;
+      phone: string | null;
     };
   };
   test: {
@@ -42,6 +44,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -85,6 +88,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
           results_entered_at,
           technician_notes,
           sent_to_doctor_at,
+          sms_sent_at,
           created_at,
           visit:visits (
             id,
@@ -92,7 +96,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             doctor_id,
             patient:patients (
               id,
-              name
+              name,
+              phone
             )
           ),
           test:tests (
@@ -200,6 +205,52 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
     } catch (error) {
       console.error('Error sending results to doctor:', error);
       alert('Failed to send results to doctor');
+    }
+  };
+
+  const handleSendSMS = async (visitTest: VisitTest) => {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'doctor')) {
+      alert('Only administrators and doctors can send SMS');
+      return;
+    }
+
+    if (!visitTest.visit.patient.phone) {
+      alert('Patient has no phone number');
+      return;
+    }
+
+    const confirmSend = confirm(
+      `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "Hello ${visitTest.visit.patient.name}, your test results are ready. Please visit the clinic."`
+    );
+    if (!confirmSend) return;
+
+    setSendingSmsFor(visitTest.id);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          visit_test_id: visitTest.id,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send SMS');
+      }
+
+      alert('SMS sent successfully!');
+      await loadVisitTests();
+    } catch (error: any) {
+      console.error('Error sending SMS:', error);
+      alert(`Failed to send SMS: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSendingSmsFor(null);
     }
   };
 
@@ -383,6 +434,9 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                   Sent to Doctor
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SMS Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -390,7 +444,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredTests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                     No tests found
                   </td>
                 </tr>
@@ -443,6 +497,31 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                             Send
                           </button>
                         </div>
+                      ) : (
+                        <span className="text-xs text-gray-400">-</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {vt.sms_sent_at ? (
+                        <div>
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <MessageSquare className="w-3 h-3 mr-1" />
+                            SMS Sent
+                          </span>
+                          <div className="text-xs text-gray-500 mt-1">
+                            {formatDateTime(vt.sms_sent_at)}
+                          </div>
+                        </div>
+                      ) : vt.results_status === 'completed' && (profile?.role === 'admin' || profile?.role === 'doctor') && vt.visit.patient.phone ? (
+                        <button
+                          onClick={() => handleSendSMS(vt)}
+                          disabled={sendingSmsFor === vt.id}
+                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                          title="Send SMS to patient"
+                        >
+                          <MessageSquare className="w-3 h-3 mr-1" />
+                          {sendingSmsFor === vt.id ? 'Sending...' : 'Send SMS'}
+                        </button>
                       ) : (
                         <span className="text-xs text-gray-400">-</span>
                       )}
