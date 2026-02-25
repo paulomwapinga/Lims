@@ -39,8 +39,114 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
   const [totalPatients, setTotalPatients] = useState(0);
 
   useEffect(() => {
-    loadVisits();
-    loadTotalPatients();
+    const abortController = new AbortController();
+    let mounted = true;
+
+    const loadAllData = async () => {
+      try {
+        const patientsPromise = supabase
+          .from('patients')
+          .select('*', { count: 'exact', head: true })
+          .abortSignal(abortController.signal);
+
+        const visitsPromise = supabase
+          .from('visits')
+          .select(
+            `
+            id,
+            created_at,
+            total,
+            payment_status,
+            paid,
+            balance,
+            diagnosis,
+            notes,
+            patients(name),
+            users(name)
+          `
+          )
+          .order('created_at', { ascending: false })
+          .abortSignal(abortController.signal);
+
+        const [patientsResult, visitsResult] = await Promise.all([
+          patientsPromise,
+          visitsPromise
+        ]);
+
+        if (!mounted) return;
+
+        if (patientsResult.error) throw patientsResult.error;
+        if (visitsResult.error) throw visitsResult.error;
+
+        setTotalPatients(patientsResult.count || 0);
+
+        if (!visitsResult.data || visitsResult.data.length === 0) {
+          setVisits([]);
+          setLoading(false);
+          return;
+        }
+
+        const visitIds = visitsResult.data.map(v => v.id);
+
+        const { data: allVisitTests } = await supabase
+          .from('visit_tests')
+          .select('visit_id, results_status')
+          .in('visit_id', visitIds)
+          .abortSignal(abortController.signal);
+
+        if (!mounted) return;
+
+        const testsByVisit = (allVisitTests || []).reduce((acc: any, test) => {
+          if (!acc[test.visit_id]) {
+            acc[test.visit_id] = { total: 0, pending: 0, inProgress: 0, completed: 0 };
+          }
+          acc[test.visit_id].total++;
+          if (test.results_status === 'pending') acc[test.visit_id].pending++;
+          if (test.results_status === 'in_progress') acc[test.visit_id].inProgress++;
+          if (test.results_status === 'completed') acc[test.visit_id].completed++;
+          return acc;
+        }, {});
+
+        const visitsWithTests = visitsResult.data.map((v: any) => {
+          const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
+
+          return {
+            id: v.id,
+            created_at: v.created_at,
+            patient_name: v.patients?.name || 'Unknown',
+            doctor_name: v.users?.name || 'Unknown',
+            total: v.total,
+            payment_status: v.payment_status,
+            paid: v.paid,
+            balance: v.balance,
+            diagnosis: v.diagnosis,
+            notes: v.notes,
+            tests_count: testStats.total,
+            pending_tests: testStats.pending,
+            in_progress_tests: testStats.inProgress,
+            completed_tests: testStats.completed,
+          };
+        });
+
+        setVisits(visitsWithTests);
+      } catch (error: any) {
+        if (!mounted || error.name === 'AbortError') {
+          return;
+        }
+        console.error('Error loading visits:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    loadAllData();
+
+    return () => {
+      mounted = false;
+      abortController.abort();
+    };
   }, []);
 
   async function loadTotalPatients() {
@@ -77,6 +183,11 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
+
+      if (!data || data.length === 0) {
+        setVisits([]);
+        return;
+      }
 
       const visitIds = data.map(v => v.id);
 
@@ -120,8 +231,6 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
       setVisits(visitsWithTests);
     } catch (error) {
       console.error('Error loading visits:', error);
-    } finally {
-      setLoading(false);
     }
   }
 
