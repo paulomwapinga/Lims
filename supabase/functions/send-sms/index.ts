@@ -26,13 +26,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const body: SmsRequest = await req.json();
+    console.log('Received request body:', JSON.stringify(body));
+
     const { phone, message } = body;
 
     const api_key = body.api_key || body.apiKey || '';
     const secret_key = body.secret_key || '';
     const source_addr = body.source_addr || '';
 
+    console.log('Parsed credentials:', {
+      hasPhone: !!phone,
+      hasMessage: !!message,
+      hasApiKey: !!api_key,
+      hasSecretKey: !!secret_key,
+      hasSourceAddr: !!source_addr
+    });
+
     if (!phone || !message) {
+      console.error('Missing phone or message');
       return new Response(
         JSON.stringify({ error: "Phone number and message are required" }),
         {
@@ -43,8 +54,16 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!api_key || !secret_key || !source_addr) {
+      console.error('Missing SMS credentials', { api_key: !!api_key, secret_key: !!secret_key, source_addr: !!source_addr });
       return new Response(
-        JSON.stringify({ error: "SMS credentials not configured" }),
+        JSON.stringify({
+          error: "SMS credentials not configured",
+          missing: {
+            api_key: !api_key,
+            secret_key: !secret_key,
+            source_addr: !source_addr
+          }
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -92,7 +111,7 @@ Deno.serve(async (req: Request) => {
       body: JSON.stringify({
         source_addr: source_addr,
         schedule_time: "",
-        encoding: 0,
+        encoding: 1,
         message: message,
         recipients: [
           {
