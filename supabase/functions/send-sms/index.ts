@@ -46,14 +46,19 @@ Deno.serve(async (req: Request) => {
     }
 
     let cleanPhone = phone.replace(/[^0-9]/g, "");
+    cleanPhone = cleanPhone.replace(/^\+/, "");
 
-    if (cleanPhone.startsWith("0")) {
+    if (/^0[67]\d{8}$/.test(cleanPhone)) {
       cleanPhone = "255" + cleanPhone.substring(1);
     }
 
-    if (!cleanPhone.startsWith("255")) {
+    if (!/^255[67]\d{8}$/.test(cleanPhone)) {
       return new Response(
-        JSON.stringify({ error: "Phone number must be a valid Tanzania number" }),
+        JSON.stringify({
+          error: "Invalid phone format. Use 07XXXXXXXX or 2557XXXXXXXX format.",
+          received: phone,
+          cleaned: cleanPhone
+        }),
         {
           status: 400,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -61,22 +66,15 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    let actualSecret = secret_key;
+    const trimmedApiKey = api_key.trim();
+    const trimmedSecret = secret_key.trim();
 
-    if (secret_key.endsWith('==') || secret_key.endsWith('=')) {
-      try {
-        actualSecret = atob(secret_key);
-        console.log('Decoded secret key (base64 -> plain)');
-      } catch (e) {
-        console.error('Failed to decode secret key:', e);
-      }
-    }
+    const credentials = btoa(`${trimmedApiKey}:${trimmedSecret}`);
 
-    const credentials = btoa(`${api_key}:${actualSecret}`);
-
-    console.log('API Key (first 10):', api_key.substring(0, 10));
-    console.log('Secret decoded:', actualSecret !== secret_key);
-    console.log('Credentials length:', credentials.length);
+    console.log('Sending SMS to:', cleanPhone);
+    console.log('Source:', source_addr);
+    console.log('API Key length:', trimmedApiKey.length);
+    console.log('Secret Key length:', trimmedSecret.length);
 
     const response = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
@@ -91,7 +89,7 @@ Deno.serve(async (req: Request) => {
         message: message,
         recipients: [
           {
-            recipient_id: 1,
+            recipient_id: `sms_${Date.now()}`,
             dest_addr: cleanPhone,
           },
         ],
