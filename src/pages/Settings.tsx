@@ -83,7 +83,6 @@ export default function Settings() {
           .select('signature_image')
           .not('signature_image', 'is', null)
           .limit(1)
-          .maybeSingle()
       ]);
 
       if (keyValueData.error) throw keyValueData.error;
@@ -96,6 +95,10 @@ export default function Settings() {
         });
       }
 
+      const signatureImage = signatureData.data && signatureData.data.length > 0
+        ? signatureData.data[0].signature_image
+        : '';
+
       setSettings({
         clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
         clinic_address: settingsMap.clinic_address || '',
@@ -104,7 +107,7 @@ export default function Settings() {
         clinic_logo_url: settingsMap.clinic_logo_url || '/20260201_200954.jpg',
         clinic_website: settingsMap.clinic_website || '',
         currency: settingsMap.currency || 'TSh',
-        signature_image: signatureData.data?.signature_image || '',
+        signature_image: signatureImage,
       });
     } catch (error: any) {
       console.error('Error loading settings:', error);
