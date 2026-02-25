@@ -67,24 +67,32 @@ export default function Settings() {
   const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    let mounted = true;
+    let cancelled = false;
 
     const loadAllSettings = async () => {
       try {
-        const [settingsData, unitsData] = await Promise.all([
-          supabase.from('settings').select('*'),
-          supabase.from('units').select('*').order('name')
-        ]);
+        const settingsData = await supabase.from('settings').select('*');
 
-        if (!mounted) return;
+        if (cancelled) return;
 
-        if (settingsData.error) throw settingsData.error;
-        if (unitsData.error) throw unitsData.error;
+        if (settingsData.error) {
+          console.error('Settings error:', settingsData.error);
+          throw settingsData.error;
+        }
+
+        const unitsData = await supabase.from('units').select('*').order('name');
+
+        if (cancelled) return;
+
+        if (unitsData.error) {
+          console.error('Units error:', unitsData.error);
+          throw unitsData.error;
+        }
 
         const settingsMap: any = {};
         let signatureImage = '';
 
-        if (settingsData.data) {
+        if (settingsData.data && Array.isArray(settingsData.data)) {
           settingsData.data.forEach((item) => {
             if (item.key) {
               settingsMap[item.key] = item.value;
@@ -94,6 +102,8 @@ export default function Settings() {
             }
           });
         }
+
+        if (cancelled) return;
 
         setSettings({
           clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
@@ -118,89 +128,22 @@ export default function Settings() {
         });
 
         setUnits(unitsData.data || []);
+        setLoading(false);
       } catch (error: any) {
-        if (!mounted) return;
+        if (cancelled) return;
 
         console.error('Error loading settings:', error);
+        setLoading(false);
         alert(`Failed to load settings: ${error.message}`);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
       }
     };
 
     loadAllSettings();
 
     return () => {
-      mounted = false;
+      cancelled = true;
     };
   }, []);
-
-  const loadSettings = async () => {
-    try {
-      const { data, error } = await supabase.from('settings').select('*');
-
-      if (error) throw error;
-
-      const settingsMap: any = {};
-      let signatureImage = '';
-
-      if (data) {
-        data.forEach((item) => {
-          if (item.key) {
-            settingsMap[item.key] = item.value;
-          }
-          if (item.signature_image) {
-            signatureImage = item.signature_image;
-          }
-        });
-      }
-
-      setSettings({
-        clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
-        clinic_address: settingsMap.clinic_address || '',
-        clinic_phone: settingsMap.clinic_phone || '',
-        clinic_email: settingsMap.clinic_email || '',
-        clinic_logo_url: settingsMap.clinic_logo_url || '/20260201_200954.jpg',
-        clinic_website: settingsMap.clinic_website || '',
-        currency: settingsMap.currency || 'TSh',
-        signature_image: signatureImage,
-      });
-    } catch (error: any) {
-      console.error('Error loading settings:', error);
-    }
-  };
-
-  const loadSmsSettings = async () => {
-    try {
-      const { data, error } = await supabase.from('settings').select('*');
-
-      if (error) throw error;
-
-      const settingsMap: any = {};
-      if (data) {
-        data.forEach((item) => {
-          if (item.key) {
-            settingsMap[item.key] = item.value;
-          }
-        });
-      }
-
-      setSmsSettings({
-        sms_enabled: settingsMap.sms_enabled === 'true',
-        sms_api_key: settingsMap.sms_api_key || '',
-        sms_secret_key: settingsMap.sms_secret_key || '',
-        sms_source_addr: settingsMap.sms_source_addr || '',
-        sms_template: settingsMap.sms_completion_message || 'Hello {patient_name}, your {test_name} results are ready. Please visit the clinic.',
-        welcome_sms_enabled: settingsMap.welcome_sms_enabled === 'true',
-        welcome_sms_template: settingsMap.welcome_sms_message || 'Welcome {patient_name}! Thank you for choosing {clinic_name}. We wish you good health.',
-        service_role_key: '',
-      });
-    } catch (error: any) {
-      console.error('Error loading SMS settings:', error);
-    }
-  };
 
   const handleSaveSms = async () => {
     if (profile?.role !== 'admin') {
