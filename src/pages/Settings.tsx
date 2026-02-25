@@ -67,33 +67,30 @@ export default function Settings() {
   const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    let cancelled = false;
+    const abortController = new AbortController();
 
     const loadAllSettings = async () => {
       try {
-        const settingsData = await supabase.from('settings').select('*');
+        const { data: settingsData, error: settingsError } = await supabase
+          .from('settings')
+          .select('*')
+          .abortSignal(abortController.signal);
 
-        if (cancelled) return;
+        if (settingsError) throw settingsError;
 
-        if (settingsData.error) {
-          console.error('Settings error:', settingsData.error);
-          throw settingsData.error;
-        }
+        const { data: unitsData, error: unitsError } = await supabase
+          .from('units')
+          .select('*')
+          .order('name')
+          .abortSignal(abortController.signal);
 
-        const unitsData = await supabase.from('units').select('*').order('name');
-
-        if (cancelled) return;
-
-        if (unitsData.error) {
-          console.error('Units error:', unitsData.error);
-          throw unitsData.error;
-        }
+        if (unitsError) throw unitsError;
 
         const settingsMap: any = {};
         let signatureImage = '';
 
-        if (settingsData.data && Array.isArray(settingsData.data)) {
-          settingsData.data.forEach((item) => {
+        if (settingsData && Array.isArray(settingsData)) {
+          settingsData.forEach((item) => {
             if (item.key) {
               settingsMap[item.key] = item.value;
             }
@@ -102,8 +99,6 @@ export default function Settings() {
             }
           });
         }
-
-        if (cancelled) return;
 
         setSettings({
           clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
@@ -127,10 +122,10 @@ export default function Settings() {
           service_role_key: '',
         });
 
-        setUnits(unitsData.data || []);
+        setUnits(unitsData || []);
         setLoading(false);
       } catch (error: any) {
-        if (error.name === 'AbortError' || cancelled) {
+        if (error.name === 'AbortError') {
           return;
         }
 
@@ -143,7 +138,7 @@ export default function Settings() {
     loadAllSettings();
 
     return () => {
-      cancelled = true;
+      abortController.abort();
     };
   }, []);
 
