@@ -17,48 +17,39 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
-    console.log("Auth header received:", authHeader ? "Yes" : "No");
 
     if (!authHeader) {
       throw new Error("Missing authorization header");
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
-    console.log("Token length:", token.length);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-    if (!supabaseUrl || !supabaseServiceKey) {
+    if (!supabaseUrl || !supabaseAnonKey) {
       throw new Error("Missing Supabase environment variables");
     }
 
-    const adminClient = createClient(
-      supabaseUrl,
-      supabaseServiceKey,
-      {
-        auth: {
-          autoRefreshToken: false,
-          persistSession: false,
-          detectSessionInUrl: false
-        }
-      }
-    );
+    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: authHeader },
+      },
+      auth: {
+        persistSession: false,
+      },
+    });
 
-    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    if (authError) {
-      console.error("Auth error details:", JSON.stringify(authError, null, 2));
-      throw new Error(`Authentication failed: ${authError.message}`);
-    }
-
-    if (!user) {
-      throw new Error("No user found from token");
+    if (userError || !user) {
+      console.error("Auth error:", userError);
+      throw new Error("Invalid JWT");
     }
 
     console.log("User authenticated:", user.id);
 
-    const { data: userProfile, error: profileError } = await adminClient
+    const { data: userProfile, error: profileError } = await supabase
       .from("users")
       .select("role")
       .eq("id", user.id)
@@ -82,6 +73,17 @@ Deno.serve(async (req: Request) => {
     if (!visit_test_id) {
       throw new Error("Missing visit_test_id");
     }
+
+    const adminClient = createClient(
+      supabaseUrl,
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        }
+      }
+    );
 
     const { data: visitTest, error: visitTestError } = await adminClient
       .from("visit_tests")
