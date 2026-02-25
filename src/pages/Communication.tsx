@@ -31,9 +31,9 @@ interface SmsLog {
   sent_at: string | null;
   created_at: string;
   sent_by: string;
-  sender: {
+  sender?: {
     full_name: string;
-  };
+  } | null;
 }
 
 interface SmsTemplate {
@@ -176,17 +176,29 @@ export default function Communication() {
   const loadSmsLogs = async () => {
     setLoadingLogs(true);
     try {
-      const { data, error } = await supabase
+      const { data: logsData, error } = await supabase
         .from('sms_logs')
-        .select(`
-          *,
-          sender:sent_by (full_name)
-        `)
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(200);
 
       if (error) throw error;
-      setSmsLogs(data || []);
+
+      const userIds = [...new Set(logsData?.map(log => log.sent_by).filter(Boolean) || [])];
+
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
+
+      const logsWithSender = logsData?.map(log => ({
+        ...log,
+        sender: usersMap.get(log.sent_by) || null
+      })) || [];
+
+      setSmsLogs(logsWithSender);
     } catch (error: any) {
       console.error('Error loading SMS logs:', error);
       alert(`Failed to load SMS history: ${error.message}`);
