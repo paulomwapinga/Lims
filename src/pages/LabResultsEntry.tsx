@@ -288,9 +288,11 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
 
       const resultsResponse = await Promise.all(upsertPromises);
 
-      const hasErrors = resultsResponse.some(r => r.error);
-      if (hasErrors) {
-        throw new Error('Failed to save some results');
+      const errors = resultsResponse.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('Errors saving results:', errors);
+        const errorMessages = errors.map(e => e.error?.message || 'Unknown error').join(', ');
+        throw new Error(`Failed to save results: ${errorMessages}`);
       }
 
       const newStatus = markComplete ? 'completed' : 'in_progress';
@@ -309,7 +311,10 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
         .update(updateData)
         .eq('id', visitTestId);
 
-      if (statusError) throw statusError;
+      if (statusError) {
+        console.error('Error updating visit_tests status:', statusError);
+        throw statusError;
+      }
 
       alert(markComplete ? 'Results saved and marked as complete!' : 'Results saved as draft!');
 
@@ -324,7 +329,8 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
       }
     } catch (error) {
       console.error('Error saving results:', error);
-      alert('Failed to save results. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to save results: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
