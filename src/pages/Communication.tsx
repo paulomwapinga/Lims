@@ -99,13 +99,14 @@ export default function Communication() {
 
   const checkSmsConfiguration = async () => {
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('settings')
         .select('key, value')
-        .in('key', ['sms_enabled', 'sms_api_key', 'sms_secret_key'])
-        .maybeSingle();
+        .in('key', ['sms_enabled', 'sms_api_key', 'sms_secret_key']);
 
-      if (data) {
+      if (error) throw error;
+
+      if (data && data.length > 0) {
         setSmsConfigured(true);
       }
     } catch (error) {
