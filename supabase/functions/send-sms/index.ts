@@ -89,7 +89,7 @@ Deno.serve(async (req: Request) => {
         message: message,
         recipients: [
           {
-            recipient_id: `sms_${Date.now()}`,
+            recipient_id: "1",
             dest_addr: cleanPhone,
           },
         ],
