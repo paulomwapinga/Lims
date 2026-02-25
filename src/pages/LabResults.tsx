@@ -209,8 +209,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   };
 
   const handleSendSMS = async (visitTest: VisitTest) => {
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'doctor')) {
-      alert('Only administrators and doctors can send SMS');
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'doctor' && profile.role !== 'lab_tech')) {
+      alert('Only administrators, doctors, and lab technicians can send SMS');
       return;
     }
 
@@ -548,7 +548,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                             {formatDateTime(vt.sms_sent_at)}
                           </div>
                         </div>
-                      ) : vt.results_status === 'completed' && (profile?.role === 'admin' || profile?.role === 'doctor') && vt.visit.patient.phone ? (
+                      ) : vt.results_status === 'completed' && (profile?.role === 'admin' || profile?.role === 'doctor' || profile?.role === 'lab_tech') && vt.visit.patient.phone ? (
                         <button
                           onClick={() => handleSendSMS(vt)}
                           disabled={sendingSmsFor === vt.id}
