@@ -125,7 +125,7 @@ export default function Settings() {
         setUnits(unitsData || []);
         setLoading(false);
       } catch (error: any) {
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.code === '20' || error.message?.includes('AbortError')) {
           return;
         }
 
