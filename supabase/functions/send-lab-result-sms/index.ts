@@ -21,14 +21,13 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing authorization header");
     }
 
-    const token = authHeader.replace("Bearer ", "");
-
-    const supabaseClient = createClient(
+    const adminClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
 
     if (authError) {
       console.error("Auth error:", authError);
@@ -38,11 +37,6 @@ Deno.serve(async (req: Request) => {
     if (!user) {
       throw new Error("No user found");
     }
-
-    const adminClient = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
-    );
 
     const { data: userProfile, error: profileError } = await adminClient
       .from("users")
