@@ -68,6 +68,7 @@ Deno.serve(async (req: Request) => {
       .select(`
         id,
         visit:visits (
+          id,
           patient:patients (
             id,
             name,
@@ -79,6 +80,7 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (visitTestError || !visitTest) {
+      console.error("Visit test error:", visitTestError);
       throw new Error("Visit test not found");
     }
 
@@ -115,21 +117,39 @@ Deno.serve(async (req: Request) => {
 
     const message = messageTemplate.replace(/{patient_name}/g, patient.name);
 
+    let cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    cleanPhone = cleanPhone.replace(/^\+/, "");
+
+    if (/^0[67]\d{8}$/.test(cleanPhone)) {
+      cleanPhone = "255" + cleanPhone.substring(1);
+    }
+
+    if (!/^255[67]\d{8}$/.test(cleanPhone)) {
+      throw new Error(`Invalid phone format: ${patient.phone}`);
+    }
+
+    const trimmedApiKey = apiKey.trim();
+    const trimmedSecret = secretKey.trim();
+
+    console.log('Sending SMS to:', cleanPhone);
+    console.log('Message:', message);
+    console.log('Source:', sourceAddr);
+
     const beemResponse = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Basic ${btoa(`${apiKey}:${secretKey}`)}`,
+        "Authorization": `Basic ${btoa(`${trimmedApiKey}:${trimmedSecret}`)}`,
       },
       body: JSON.stringify({
         source_addr: sourceAddr,
         schedule_time: "",
-        encoding: 0,
+        encoding: 1,
         message: message,
         recipients: [
           {
             recipient_id: 1,
-            dest_addr: patient.phone,
+            dest_addr: cleanPhone,
           },
         ],
       }),
