@@ -139,6 +139,13 @@ Deno.serve(async (req: Request) => {
 
     const smsSuccess = beemResponse.ok;
 
+    let errorDetails = null;
+    if (!smsSuccess) {
+      errorDetails = beemResult.message || beemResult.error || JSON.stringify(beemResult) || `HTTP ${beemResponse.status}`;
+      console.error("Beem API error:", errorDetails);
+      console.error("Full response:", beemResult);
+    }
+
     await supabaseClient
       .from("sms_logs")
       .insert({
@@ -147,7 +154,7 @@ Deno.serve(async (req: Request) => {
         phone_number: patient.phone,
         message: message,
         status: smsSuccess ? "sent" : "failed",
-        error_message: smsSuccess ? null : (beemResult.error || "Unknown error"),
+        error_message: smsSuccess ? null : errorDetails,
         sent_by: user.id,
         sent_at: smsSuccess ? now : null,
       });
@@ -159,18 +166,21 @@ Deno.serve(async (req: Request) => {
         .eq("id", visit_test_id);
     }
 
+    if (!smsSuccess) {
+      throw new Error(`Beem API error: ${errorDetails}`);
+    }
+
     return new Response(
       JSON.stringify({
-        success: smsSuccess,
-        message: smsSuccess ? "SMS sent successfully" : "Failed to send SMS",
-        error: smsSuccess ? null : beemResult.error,
+        success: true,
+        message: "SMS sent successfully",
       }),
       {
         headers: {
           ...corsHeaders,
           "Content-Type": "application/json",
         },
-        status: smsSuccess ? 200 : 500,
+        status: 200,
       }
     );
   } catch (error: any) {
