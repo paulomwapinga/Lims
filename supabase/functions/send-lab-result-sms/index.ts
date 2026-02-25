@@ -17,26 +17,39 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
+    console.log("Auth header received:", authHeader ? "Yes" : "No");
+
     if (!authHeader) {
       throw new Error("Missing authorization header");
     }
 
+    const token = authHeader.replace("Bearer ", "").trim();
+    console.log("Token length:", token.length);
+
     const adminClient = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false
+        }
+      }
     );
 
-    const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await adminClient.auth.getUser(token);
 
     if (authError) {
-      console.error("Auth error:", authError);
+      console.error("Auth error details:", JSON.stringify(authError, null, 2));
       throw new Error(`Authentication failed: ${authError.message}`);
     }
 
     if (!user) {
-      throw new Error("No user found");
+      throw new Error("No user found from token");
     }
+
+    console.log("User authenticated:", user.id);
 
     const { data: userProfile, error: profileError } = await adminClient
       .from("users")
