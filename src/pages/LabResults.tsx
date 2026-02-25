@@ -256,6 +256,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         },
         body: JSON.stringify({
           visit_test_id: visitTest.id,
+          recipient_type: 'patient',
         }),
       });
 

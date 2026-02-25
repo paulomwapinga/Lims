@@ -394,6 +394,33 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
 
         if (notifError) throw notifError;
 
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                visit_test_id: visitTestId,
+                recipient_type: 'doctor',
+              }),
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+              console.log('SMS sent to doctor');
+            } else {
+              console.warn('Failed to send SMS to doctor:', result.error);
+            }
+          }
+        } catch (smsError) {
+          console.warn('SMS notification failed (non-critical):', smsError);
+        }
+
         alert('Results successfully sent to doctor and admin!');
 
         if (onSaved) {

@@ -70,18 +70,24 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Unauthorized: Only admins and doctors can send SMS (current role: ${userProfile.role})`);
     }
 
-    const { visit_test_id } = await req.json();
+    const { visit_test_id, recipient_type } = await req.json();
 
     if (!visit_test_id) {
       throw new Error("Missing visit_test_id");
+    }
+
+    if (!recipient_type || !["patient", "lab_tech", "doctor"].includes(recipient_type)) {
+      throw new Error("Invalid recipient_type. Must be 'patient', 'lab_tech', or 'doctor'");
     }
 
     const { data: visitTest, error: visitTestError } = await adminClient
       .from("visit_tests")
       .select(`
         id,
+        lab_tech_id,
         visit:visits (
           id,
+          doctor_id,
           patient:patients (
             id,
             name,
@@ -115,10 +121,6 @@ Deno.serve(async (req: Request) => {
       throw new Error("Patient data not found");
     }
 
-    if (!patient.phone) {
-      throw new Error("Patient has no phone number");
-    }
-
     const { data: settings } = await adminClient
       .from("settings")
       .select("key, value");
@@ -138,15 +140,84 @@ Deno.serve(async (req: Request) => {
     const apiKey = settingsMap.sms_api_key;
     const secretKey = settingsMap.sms_secret_key;
     const sourceAddr = settingsMap.sms_source_addr;
-    const messageTemplate = settingsMap.sms_completion_message || "Hello {patient_name}, your test results are ready. Please visit the clinic.";
 
     if (!apiKey || !secretKey || !sourceAddr) {
       throw new Error("SMS credentials are not configured");
     }
 
-    const message = messageTemplate.replace(/{patient_name}/g, patient.name);
+    let recipientPhone: string;
+    let recipientName: string;
+    let message: string;
+    let smsType: string;
 
-    let cleanPhone = patient.phone.replace(/[^0-9]/g, "");
+    if (recipient_type === "lab_tech") {
+      if (!visitTest.lab_tech_id) {
+        throw new Error("No lab technician assigned to this test");
+      }
+
+      const { data: labTech, error: labTechError } = await adminClient
+        .from("users")
+        .select("name, phone")
+        .eq("id", visitTest.lab_tech_id)
+        .maybeSingle();
+
+      if (labTechError || !labTech) {
+        throw new Error("Lab technician not found");
+      }
+
+      if (!labTech.phone) {
+        throw new Error("Lab technician has no phone number");
+      }
+
+      recipientPhone = labTech.phone;
+      recipientName = labTech.name;
+      smsType = "lab_tech_notification";
+
+      const messageTemplate = settingsMap.sms_lab_tech_message || "Hello {lab_tech_name}, test results for {patient_name} are ready for review.";
+      message = messageTemplate
+        .replace(/{lab_tech_name}/g, labTech.name)
+        .replace(/{patient_name}/g, patient.name);
+    } else if (recipient_type === "doctor") {
+      if (!visit.doctor_id) {
+        throw new Error("No doctor assigned to this visit");
+      }
+
+      const { data: doctor, error: doctorError } = await adminClient
+        .from("users")
+        .select("name, phone")
+        .eq("id", visit.doctor_id)
+        .maybeSingle();
+
+      if (doctorError || !doctor) {
+        throw new Error("Doctor not found");
+      }
+
+      if (!doctor.phone) {
+        throw new Error("Doctor has no phone number");
+      }
+
+      recipientPhone = doctor.phone;
+      recipientName = doctor.name;
+      smsType = "doctor_notification";
+
+      const messageTemplate = settingsMap.sms_doctor_message || "Hello Dr. {doctor_name}, test results for {patient_name} are ready for review.";
+      message = messageTemplate
+        .replace(/{doctor_name}/g, doctor.name)
+        .replace(/{patient_name}/g, patient.name);
+    } else {
+      if (!patient.phone) {
+        throw new Error("Patient has no phone number");
+      }
+
+      recipientPhone = patient.phone;
+      recipientName = patient.name;
+      smsType = "test_results";
+
+      const messageTemplate = settingsMap.sms_completion_message || "Hello {patient_name}, your test results are ready. Please visit the clinic.";
+      message = messageTemplate.replace(/{patient_name}/g, patient.name);
+    }
+
+    let cleanPhone = recipientPhone.replace(/[^0-9]/g, "");
     cleanPhone = cleanPhone.replace(/^\+/, "");
 
     if (/^0[67]\d{8}$/.test(cleanPhone)) {
@@ -154,7 +225,7 @@ Deno.serve(async (req: Request) => {
     }
 
     if (!/^255[67]\d{8}$/.test(cleanPhone)) {
-      throw new Error(`Invalid phone format: ${patient.phone}`);
+      throw new Error(`Invalid phone format: ${recipientPhone}`);
     }
 
     const trimmedApiKey = apiKey.trim();
@@ -200,9 +271,9 @@ Deno.serve(async (req: Request) => {
       .from("sms_log")
       .insert({
         visit_id: visit.id,
-        phone_number: patient.phone,
+        phone_number: recipientPhone,
         message: message,
-        sms_type: "test_results",
+        sms_type: smsType,
       });
 
     if (smsSuccess) {
@@ -220,6 +291,8 @@ Deno.serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         message: "SMS sent successfully",
+        recipient_type: recipient_type,
+        recipient_name: recipientName,
       }),
       {
         headers: {
