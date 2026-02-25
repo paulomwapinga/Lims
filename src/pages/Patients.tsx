@@ -574,6 +574,8 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
       const result = await response.json();
 
+      console.log('SMS Response:', { status: response.status, result });
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Failed to send SMS');
       }

@@ -245,6 +245,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
 
       const result = await response.json();
 
+      console.log('SMS Response:', { status: response.status, result });
+
       if (!response.ok || !result.success) {
         throw new Error(result.error || 'Failed to send SMS');
       }
