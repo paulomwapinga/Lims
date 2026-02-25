@@ -107,12 +107,13 @@ Deno.serve(async (req: Request) => {
     const apiKey = settingsMap.sms_api_key;
     const secretKey = settingsMap.sms_secret_key;
     const sourceAddr = settingsMap.sms_source_addr;
+    const messageTemplate = settingsMap.sms_result_ready_message || "Hello {patient_name}, your test results are ready. Please visit the clinic.";
 
     if (!apiKey || !secretKey || !sourceAddr) {
       throw new Error("SMS credentials are not configured");
     }
 
-    const message = `Hello ${patient.name}, your test results are ready. Please visit the clinic.`;
+    const message = messageTemplate.replace("{patient_name}", patient.name);
 
     const beemResponse = await fetch("https://apisms.beem.africa/public/v1/send", {
       method: "POST",
