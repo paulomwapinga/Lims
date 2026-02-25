@@ -131,11 +131,13 @@ export default function Settings() {
 
         setUnits(unitsData.data || []);
       } catch (error: any) {
-        if (!mounted || error.name === 'AbortError') {
+        if (error.name === 'AbortError' || !mounted) {
           return;
         }
         console.error('Error loading settings:', error);
-        alert(`Failed to load settings: ${error.message}`);
+        if (mounted) {
+          alert(`Failed to load settings: ${error.message}`);
+        }
       } finally {
         if (mounted) {
           setLoading(false);
