@@ -17,16 +17,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const authHeader = req.headers.get("Authorization");
+    console.log("Authorization header present:", !!authHeader);
 
     if (!authHeader) {
       throw new Error("Missing authorization header");
     }
 
     const token = authHeader.replace("Bearer ", "").trim();
+    console.log("Token length:", token.length);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+    console.log("Environment check:", {
+      hasUrl: !!supabaseUrl,
+      hasAnonKey: !!supabaseAnonKey,
+      hasServiceKey: !!supabaseServiceKey,
+    });
 
     if (!supabaseUrl || !supabaseAnonKey || !supabaseServiceKey) {
       throw new Error("Missing Supabase environment variables");
@@ -44,14 +52,20 @@ Deno.serve(async (req: Request) => {
       }
     });
 
-    const { data: { user }, error: authError } = await userClient.auth.getUser();
+    console.log("Attempting to verify user with token...");
+    const { data: { user }, error: authError } = await userClient.auth.getUser(token);
 
-    if (authError || !user) {
-      console.error("Auth error:", authError);
-      throw new Error("Invalid JWT");
+    if (authError) {
+      console.error("Auth error details:", JSON.stringify(authError, null, 2));
+      throw new Error(`Authentication failed: ${authError.message}`);
     }
 
-    console.log("User authenticated:", user.id);
+    if (!user) {
+      console.error("No user returned from getUser");
+      throw new Error("Invalid JWT: No user found");
+    }
+
+    console.log("User authenticated successfully:", user.id);
 
     const adminClient = createClient(supabaseUrl, supabaseServiceKey, {
       auth: {
