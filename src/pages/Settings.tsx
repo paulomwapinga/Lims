@@ -67,37 +67,83 @@ export default function Settings() {
   const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    loadSettings();
-    loadSmsSettings();
-    loadUnits();
+    const loadAllSettings = async () => {
+      try {
+        const [settingsData, unitsData] = await Promise.all([
+          supabase.from('settings').select('*'),
+          supabase.from('units').select('*').order('name')
+        ]);
+
+        if (settingsData.error) throw settingsData.error;
+        if (unitsData.error) throw unitsData.error;
+
+        const settingsMap: any = {};
+        let signatureImage = '';
+
+        if (settingsData.data) {
+          settingsData.data.forEach((item) => {
+            if (item.key) {
+              settingsMap[item.key] = item.value;
+            }
+            if (item.signature_image) {
+              signatureImage = item.signature_image;
+            }
+          });
+        }
+
+        setSettings({
+          clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
+          clinic_address: settingsMap.clinic_address || '',
+          clinic_phone: settingsMap.clinic_phone || '',
+          clinic_email: settingsMap.clinic_email || '',
+          clinic_logo_url: settingsMap.clinic_logo_url || '/20260201_200954.jpg',
+          clinic_website: settingsMap.clinic_website || '',
+          currency: settingsMap.currency || 'TSh',
+          signature_image: signatureImage,
+        });
+
+        setSmsSettings({
+          sms_enabled: settingsMap.sms_enabled === 'true',
+          sms_api_key: settingsMap.sms_api_key || '',
+          sms_secret_key: settingsMap.sms_secret_key || '',
+          sms_source_addr: settingsMap.sms_source_addr || '',
+          sms_template: settingsMap.sms_completion_message || 'Hello {patient_name}, your {test_name} results are ready. Please visit the clinic.',
+          welcome_sms_enabled: settingsMap.welcome_sms_enabled === 'true',
+          welcome_sms_template: settingsMap.welcome_sms_message || 'Welcome {patient_name}! Thank you for choosing {clinic_name}. We wish you good health.',
+          service_role_key: '',
+        });
+
+        setUnits(unitsData.data || []);
+      } catch (error: any) {
+        console.error('Error loading settings:', error);
+        alert(`Failed to load settings: ${error.message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAllSettings();
   }, []);
 
   const loadSettings = async () => {
     try {
-      const [keyValueData, signatureData] = await Promise.all([
-        supabase
-          .from('settings')
-          .select('key, value'),
-        supabase
-          .from('settings')
-          .select('signature_image')
-          .not('signature_image', 'is', null)
-          .limit(1)
-      ]);
+      const { data, error } = await supabase.from('settings').select('*');
 
-      if (keyValueData.error) throw keyValueData.error;
+      if (error) throw error;
 
       const settingsMap: any = {};
+      let signatureImage = '';
 
-      if (keyValueData.data) {
-        keyValueData.data.forEach((item) => {
-          settingsMap[item.key] = item.value;
+      if (data) {
+        data.forEach((item) => {
+          if (item.key) {
+            settingsMap[item.key] = item.value;
+          }
+          if (item.signature_image) {
+            signatureImage = item.signature_image;
+          }
         });
       }
-
-      const signatureImage = signatureData.data && signatureData.data.length > 0
-        ? signatureData.data[0].signature_image
-        : '';
 
       setSettings({
         clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
@@ -111,25 +157,21 @@ export default function Settings() {
       });
     } catch (error: any) {
       console.error('Error loading settings:', error);
-      alert(`Failed to load settings: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
   };
 
   const loadSmsSettings = async () => {
     try {
-      const { data, error } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['sms_enabled', 'sms_api_key', 'sms_secret_key', 'sms_source_addr', 'sms_completion_message', 'welcome_sms_enabled', 'welcome_sms_message']);
+      const { data, error } = await supabase.from('settings').select('*');
 
       if (error) throw error;
 
       const settingsMap: any = {};
       if (data) {
         data.forEach((item) => {
-          settingsMap[item.key] = item.value;
+          if (item.key) {
+            settingsMap[item.key] = item.value;
+          }
         });
       }
 
