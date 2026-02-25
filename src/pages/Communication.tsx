@@ -51,6 +51,7 @@ export default function Communication() {
   const [activeTab, setActiveTab] = useState<TabType>('send');
   const [loading, setLoading] = useState(false);
   const [smsConfigured, setSmsConfigured] = useState(false);
+  const [checkingConfig, setCheckingConfig] = useState(true);
 
   const [recipientType, setRecipientType] = useState<RecipientType>('single_patient');
   const [selectedPatients, setSelectedPatients] = useState<string[]>([]);
@@ -81,16 +82,34 @@ export default function Communication() {
   });
 
   useEffect(() => {
-    checkSmsConfiguration();
-    if (activeTab === 'send') {
-      loadPatients();
-      loadUsers();
-      loadTemplates();
-    } else if (activeTab === 'history') {
-      loadSmsLogs();
-    } else if (activeTab === 'templates') {
-      loadTemplates();
-    }
+    const abortController = new AbortController();
+    let mounted = true;
+
+    const initializeData = async () => {
+      setCheckingConfig(true);
+      await checkSmsConfiguration();
+
+      if (!mounted) return;
+
+      if (activeTab === 'send') {
+        loadPatients();
+        loadUsers();
+        loadTemplates();
+      } else if (activeTab === 'history') {
+        loadSmsLogs();
+      } else if (activeTab === 'templates') {
+        loadTemplates();
+      }
+
+      setCheckingConfig(false);
+    };
+
+    initializeData();
+
+    return () => {
+      mounted = false;
+      abortController.abort();
+    };
   }, [activeTab]);
 
   useEffect(() => {
@@ -106,11 +125,21 @@ export default function Communication() {
 
       if (error) throw error;
 
-      if (data && data.length > 0) {
-        setSmsConfigured(true);
+      const settingsMap: any = {};
+      if (data) {
+        data.forEach((item: any) => {
+          settingsMap[item.key] = item.value;
+        });
       }
+
+      const isEnabled = settingsMap.sms_enabled === 'true';
+      const hasApiKey = settingsMap.sms_api_key && settingsMap.sms_api_key.trim() !== '';
+      const hasSecretKey = settingsMap.sms_secret_key && settingsMap.sms_secret_key.trim() !== '';
+
+      setSmsConfigured(isEnabled && hasApiKey && hasSecretKey);
     } catch (error) {
       console.error('Error checking SMS config:', error);
+      setSmsConfigured(false);
     }
   };
 
@@ -464,6 +493,19 @@ export default function Communication() {
                 Only administrators can access the Communication module.
               </p>
             </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (checkingConfig) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12">
+          <div className="text-center text-gray-500">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-3"></div>
+            Checking configuration...
           </div>
         </div>
       </div>
