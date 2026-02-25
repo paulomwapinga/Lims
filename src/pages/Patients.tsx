@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
 import { formatDate, formatTime, formatDateTime } from '../lib/dateFormat';
-import { Search, Plus, User, Eye, Edit2, Trash2, FileText, Pill, X, Printer } from 'lucide-react';
+import { Search, Plus, User, Eye, Edit2, Trash2, FileText, Pill, X, Printer, MessageSquare } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface Patient {
@@ -125,6 +125,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     enteredByRole: string | null;
   }>({ visitTest: null, results: [], settings: null, enteredByName: null, enteredByRole: null });
   const [loadingTestResult, setLoadingTestResult] = useState(false);
+  const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   const [formData, setFormData] = useState({
@@ -514,6 +515,73 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     window.print();
   }
 
+  const handleSendSMS = async (patient: Patient) => {
+    if (!profile || (profile.role !== 'admin' && profile.role !== 'doctor')) {
+      alert('Only administrators and doctors can send SMS');
+      return;
+    }
+
+    if (!patient.phone) {
+      alert('Patient has no phone number');
+      return;
+    }
+
+    const { data: completedTests, error: testsError } = await supabase
+      .from('visit_tests')
+      .select(`
+        id,
+        visit:visits!inner (
+          patient_id
+        )
+      `)
+      .eq('visit.patient_id', patient.id)
+      .eq('results_status', 'completed');
+
+    if (testsError) {
+      console.error('Error fetching tests:', testsError);
+      alert('Failed to check for completed tests');
+      return;
+    }
+
+    if (!completedTests || completedTests.length === 0) {
+      alert('This patient has no completed test results');
+      return;
+    }
+
+    const confirmSend = confirm(
+      `Send SMS to ${patient.name}?\n\nPhone: ${patient.phone}\n\nMessage: "Hello ${patient.name}, your test results are ready. Please visit the clinic."`
+    );
+    if (!confirmSend) return;
+
+    setSendingSmsFor(patient.id);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          visit_test_id: completedTests[0].id,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send SMS');
+      }
+
+      alert('SMS sent successfully!');
+    } catch (error: any) {
+      console.error('Error sending SMS:', error);
+      alert(`Failed to send SMS: ${error.message || 'Unknown error'}`);
+    } finally {
+      setSendingSmsFor(null);
+    }
+  };
+
   function calculateAgeFromDOB(dob: string): number {
     const birthDate = new Date(dob);
     const today = new Date();
@@ -618,6 +686,17 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                     >
                       <Eye className="w-5 h-5" />
                     </button>
+                    {(profile?.role === 'admin' || profile?.role === 'doctor') && patient.phone && (
+                      <button
+                        onClick={() => handleSendSMS(patient)}
+                        disabled={sendingSmsFor === patient.id}
+                        className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                        title="Send SMS to Patient"
+                      >
+                        <MessageSquare className="w-3 h-3 mr-1" />
+                        {sendingSmsFor === patient.id ? 'Sending...' : 'Send SMS'}
+                      </button>
+                    )}
                     {profile?.role === 'admin' && (
                       <>
                         <button
