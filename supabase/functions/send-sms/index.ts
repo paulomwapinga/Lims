@@ -9,9 +9,11 @@ const corsHeaders = {
 interface SmsRequest {
   phone: string;
   message: string;
-  api_key: string;
-  secret_key: string;
-  source_addr: string;
+  api_key?: string;
+  secret_key?: string;
+  source_addr?: string;
+  apiUrl?: string;
+  apiKey?: string;
 }
 
 Deno.serve(async (req: Request) => {
@@ -23,7 +25,12 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const { phone, message, api_key, secret_key, source_addr }: SmsRequest = await req.json();
+    const body: SmsRequest = await req.json();
+    const { phone, message } = body;
+
+    const api_key = body.api_key || body.apiKey || '';
+    const secret_key = body.secret_key || '';
+    const source_addr = body.source_addr || '';
 
     if (!phone || !message) {
       return new Response(

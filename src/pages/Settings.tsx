@@ -117,25 +117,29 @@ export default function Settings() {
   const loadSmsSettings = async () => {
     try {
       const { data, error } = await supabase
-        .from('facility_settings')
-        .select('sms_enabled, sms_api_key, sms_secret_key, sms_source_addr, sms_template, welcome_sms_enabled, welcome_sms_template, service_role_key')
-        .limit(1)
-        .maybeSingle();
+        .from('settings')
+        .select('key, value')
+        .in('key', ['sms_enabled', 'sms_api_key', 'sms_secret_key', 'sms_source_addr', 'sms_completion_message', 'welcome_sms_enabled', 'welcome_sms_message']);
 
       if (error) throw error;
 
+      const settingsMap: any = {};
       if (data) {
-        setSmsSettings({
-          sms_enabled: data.sms_enabled || false,
-          sms_api_key: data.sms_api_key || '',
-          sms_secret_key: data.sms_secret_key || '',
-          sms_source_addr: data.sms_source_addr || '',
-          sms_template: data.sms_template || 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
-          welcome_sms_enabled: data.welcome_sms_enabled || false,
-          welcome_sms_template: data.welcome_sms_template || 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
-          service_role_key: data.service_role_key || '',
+        data.forEach((item) => {
+          settingsMap[item.key] = item.value;
         });
       }
+
+      setSmsSettings({
+        sms_enabled: settingsMap.sms_enabled === 'true',
+        sms_api_key: settingsMap.sms_api_key || '',
+        sms_secret_key: settingsMap.sms_secret_key || '',
+        sms_source_addr: settingsMap.sms_source_addr || '',
+        sms_template: settingsMap.sms_completion_message || 'Hello {patient_name}, your {test_name} results are ready. Please visit the clinic.',
+        welcome_sms_enabled: settingsMap.welcome_sms_enabled === 'true',
+        welcome_sms_template: settingsMap.welcome_sms_message || 'Welcome {patient_name}! Thank you for choosing {clinic_name}. We wish you good health.',
+        service_role_key: '',
+      });
     } catch (error: any) {
       console.error('Error loading SMS settings:', error);
     }
@@ -149,41 +153,20 @@ export default function Settings() {
 
     setSavingSms(true);
     try {
-      const { data: existingSettings } = await supabase
-        .from('facility_settings')
-        .select('id')
-        .limit(1)
-        .maybeSingle();
+      const settingsToUpdate = [
+        { key: 'sms_enabled', value: smsSettings.sms_enabled ? 'true' : 'false' },
+        { key: 'sms_api_key', value: smsSettings.sms_api_key },
+        { key: 'sms_secret_key', value: smsSettings.sms_secret_key },
+        { key: 'sms_source_addr', value: smsSettings.sms_source_addr },
+        { key: 'sms_completion_message', value: smsSettings.sms_template },
+        { key: 'welcome_sms_enabled', value: smsSettings.welcome_sms_enabled ? 'true' : 'false' },
+        { key: 'welcome_sms_message', value: smsSettings.welcome_sms_template },
+      ];
 
-      if (existingSettings) {
+      for (const setting of settingsToUpdate) {
         const { error } = await supabase
-          .from('facility_settings')
-          .update({
-            sms_enabled: smsSettings.sms_enabled,
-            sms_api_key: smsSettings.sms_api_key,
-            sms_secret_key: smsSettings.sms_secret_key,
-            sms_source_addr: smsSettings.sms_source_addr,
-            sms_template: smsSettings.sms_template,
-            welcome_sms_enabled: smsSettings.welcome_sms_enabled,
-            welcome_sms_template: smsSettings.welcome_sms_template,
-            service_role_key: smsSettings.service_role_key,
-          })
-          .eq('id', existingSettings.id);
-
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from('facility_settings')
-          .insert({
-            sms_enabled: smsSettings.sms_enabled,
-            sms_api_key: smsSettings.sms_api_key,
-            sms_secret_key: smsSettings.sms_secret_key,
-            sms_source_addr: smsSettings.sms_source_addr,
-            sms_template: smsSettings.sms_template,
-            welcome_sms_enabled: smsSettings.welcome_sms_enabled,
-            welcome_sms_template: smsSettings.welcome_sms_template,
-            service_role_key: smsSettings.service_role_key,
-          });
+          .from('settings')
+          .upsert({ key: setting.key, value: setting.value }, { onConflict: 'key' });
 
         if (error) throw error;
       }
