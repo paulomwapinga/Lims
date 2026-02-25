@@ -67,26 +67,19 @@ export default function Settings() {
   const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    const abortController = new AbortController();
-
     const loadAllSettings = async () => {
       try {
-        console.log('Loading settings...');
         const { data: settingsData, error: settingsError } = await supabase
           .from('settings')
-          .select('*')
-          .abortSignal(abortController.signal);
+          .select('*');
 
-        console.log('Settings data:', settingsData, 'Error:', settingsError);
         if (settingsError) throw settingsError;
 
         const { data: unitsData, error: unitsError } = await supabase
           .from('units')
           .select('*')
-          .order('name')
-          .abortSignal(abortController.signal);
+          .order('name');
 
-        console.log('Units data:', unitsData, 'Error:', unitsError);
         if (unitsError) throw unitsError;
 
         const settingsMap: any = {};
@@ -126,13 +119,8 @@ export default function Settings() {
         });
 
         setUnits(unitsData || []);
-        console.log('Settings loaded successfully');
         setLoading(false);
       } catch (error: any) {
-        if (error.name === 'AbortError' || error.code === '20' || error.message?.includes('AbortError')) {
-          return;
-        }
-
         console.error('Error loading settings:', error);
         setLoading(false);
         alert(`Failed to load settings: ${error.message}`);
@@ -140,10 +128,6 @@ export default function Settings() {
     };
 
     loadAllSettings();
-
-    return () => {
-      abortController.abort();
-    };
   }, []);
 
   const handleSaveSms = async () => {
