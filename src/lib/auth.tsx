@@ -48,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           loadUserProfile(session.user.id);
         } else {
           setProfile(null);
+          setProfileError(null);
+          setConnectionError(false);
+          setIsLoadingProfile(false);
           setLoading(false);
         }
       })();
@@ -182,8 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    console.log('Signing out...');
     setProfile(null);
+    setProfileError(null);
+    setConnectionError(false);
+    setIsLoadingProfile(false);
+    setLoading(false);
+    await supabase.auth.signOut();
   }
 
   return (

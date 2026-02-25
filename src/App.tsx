@@ -41,7 +41,7 @@ function AppContent() {
     );
   }
 
-  if (user && !profile) {
+  if (user && !profile && profileError) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="text-center max-w-2xl">
