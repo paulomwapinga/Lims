@@ -130,9 +130,7 @@ export default function Settings() {
         setUnits(unitsData.data || []);
         setLoading(false);
       } catch (error: any) {
-        if (cancelled) return;
-
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || cancelled) {
           return;
         }
 
