@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { useNotifications } from '../lib/notifications';
-import { formatDate } from '../lib/dateFormat';
+import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Bell } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Bell, MessageSquare } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -14,6 +14,7 @@ interface VisitTest {
   results_status: 'pending' | 'in_progress' | 'completed';
   results_entered_at: string | null;
   sent_to_doctor_at: string | null;
+  sms_sent_at: string | null;
   doctor_viewed_at: string | null;
   created_at: string;
   visit: {
@@ -22,6 +23,7 @@ interface VisitTest {
     patient: {
       id: string;
       name: string;
+      phone: string | null;
     };
   };
   test: {
@@ -34,13 +36,14 @@ interface TestResultsProps {
 }
 
 export default function TestResults({ onViewResults }: TestResultsProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { notifications, markAsRead } = useNotifications();
   const [visitTests, setVisitTests] = useState<VisitTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -79,6 +82,7 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
           results_status,
           results_entered_at,
           sent_to_doctor_at,
+          sms_sent_at,
           doctor_viewed_at,
           created_at,
           visit:visits!inner (
@@ -87,7 +91,8 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
             doctor_id,
             patient:patients (
               id,
-              name
+              name,
+              phone
             )
           ),
           test:tests (
@@ -127,6 +132,88 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
     }
 
     await loadVisitTests();
+  };
+
+  const handleSendSMS = async (visitTest: VisitTest) => {
+    if (!profile || profile.role !== 'doctor') {
+      alert('Only doctors can send SMS');
+      return;
+    }
+
+    if (!visitTest.visit.patient.phone) {
+      alert('Patient has no phone number');
+      return;
+    }
+
+    try {
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['sms_completion_message']);
+
+      const settingsMap: Record<string, string> = {};
+      if (settings) {
+        settings.forEach((s: any) => {
+          settingsMap[s.key] = s.value;
+        });
+      }
+
+      const messageTemplate = settingsMap.sms_completion_message || 'Hello {patient_name}, your test results are ready. Please visit the clinic.';
+      const previewMessage = messageTemplate.replace(/{patient_name}/g, visitTest.visit.patient.name);
+
+      const confirmSend = confirm(
+        `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "${previewMessage}"`
+      );
+      if (!confirmSend) return;
+
+      setSendingSmsFor(visitTest.id);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('No active session');
+      }
+
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          visit_test_id: visitTest.id,
+          recipient_type: 'patient',
+        }),
+      });
+
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        const text = await response.text();
+        console.error('Raw response:', text);
+        throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
+      }
+
+      console.log('SMS Response:', { status: response.status, result });
+
+      if (!response.ok || !result.success) {
+        const errorMsg = result.error || result.message || 'Failed to send SMS';
+        console.error('SMS API Error:', errorMsg);
+        throw new Error(errorMsg);
+      }
+
+      alert('SMS sent successfully!');
+      await loadVisitTests();
+    } catch (error: any) {
+      console.error('Error sending SMS (full):', error);
+      const errorMessage = error.message || 'Unknown error';
+      console.error('Error message:', errorMessage);
+      alert(`Failed to send SMS: ${errorMessage}`);
+    } finally {
+      setSendingSmsFor(null);
+    }
   };
 
   const filteredTests = visitTests.filter(vt => {
@@ -322,6 +409,9 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                   Results Available
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  SMS Status
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -329,7 +419,7 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredTests.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                     No test results found
                   </td>
                 </tr>
@@ -373,6 +463,31 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                           </div>
                         ) : (
                           <span className="text-xs text-gray-400">Not yet</span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        {vt.sms_sent_at ? (
+                          <div>
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              <MessageSquare className="w-3 h-3 mr-1" />
+                              SMS Sent
+                            </span>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {formatDateTime(vt.sms_sent_at)}
+                            </div>
+                          </div>
+                        ) : vt.results_status === 'completed' && vt.sent_to_doctor_at && vt.visit.patient.phone ? (
+                          <button
+                            onClick={() => handleSendSMS(vt)}
+                            disabled={sendingSmsFor === vt.id}
+                            className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            title="Send SMS to patient"
+                          >
+                            <MessageSquare className="w-3 h-3 mr-1" />
+                            {sendingSmsFor === vt.id ? 'Sending...' : 'Send SMS'}
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
