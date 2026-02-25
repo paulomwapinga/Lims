@@ -83,7 +83,7 @@ Deno.serve(async (req: Request) => {
     console.log('API Key length:', trimmedApiKey.length);
     console.log('Secret Key length:', trimmedSecret.length);
 
-    const response = await fetch("https://apisms.beem.africa/v1/send", {
+    const response = await fetch("https://apisms.beem.africa/public/v1/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -96,7 +96,7 @@ Deno.serve(async (req: Request) => {
         message: message,
         recipients: [
           {
-            recipient_id: "1",
+            recipient_id: 1,
             dest_addr: cleanPhone,
           },
         ],
