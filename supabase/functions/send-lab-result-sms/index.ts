@@ -115,7 +115,7 @@ Deno.serve(async (req: Request) => {
 
     const message = messageTemplate.replace(/{patient_name}/g, patient.name);
 
-    const beemResponse = await fetch("https://apisms.beem.africa/public/v1/send", {
+    const beemResponse = await fetch("https://apisms.beem.africa/v1/send", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -148,16 +148,12 @@ Deno.serve(async (req: Request) => {
     }
 
     await supabaseClient
-      .from("sms_logs")
+      .from("sms_log")
       .insert({
-        recipient_type: "patient",
-        recipient_id: patient.id,
+        visit_id: visitTest.visit.id,
         phone_number: patient.phone,
         message: message,
-        status: smsSuccess ? "sent" : "failed",
-        error_message: smsSuccess ? null : errorDetails,
-        sent_by: user.id,
-        sent_at: smsSuccess ? now : null,
+        sms_type: "test_results",
       });
 
     if (smsSuccess) {

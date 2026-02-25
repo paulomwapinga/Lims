@@ -526,35 +526,51 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
       return;
     }
 
-    const { data: completedTests, error: testsError } = await supabase
-      .from('visit_tests')
-      .select(`
-        id,
-        visit:visits!inner (
-          patient_id
-        )
-      `)
-      .eq('visit.patient_id', patient.id)
-      .eq('results_status', 'completed');
-
-    if (testsError) {
-      console.error('Error fetching tests:', testsError);
-      alert('Failed to check for completed tests');
-      return;
-    }
-
-    if (!completedTests || completedTests.length === 0) {
-      alert('This patient has no completed test results');
-      return;
-    }
-
-    const confirmSend = confirm(
-      `Send SMS to ${patient.name}?\n\nPhone: ${patient.phone}\n\nMessage: "Hello ${patient.name}, your test results are ready. Please visit the clinic."`
-    );
-    if (!confirmSend) return;
-
-    setSendingSmsFor(patient.id);
     try {
+      const { data: completedTests, error: testsError } = await supabase
+        .from('visit_tests')
+        .select(`
+          id,
+          visit:visits!inner (
+            patient_id
+          )
+        `)
+        .eq('visit.patient_id', patient.id)
+        .eq('results_status', 'completed');
+
+      if (testsError) {
+        console.error('Error fetching tests:', testsError);
+        alert('Failed to check for completed tests');
+        return;
+      }
+
+      if (!completedTests || completedTests.length === 0) {
+        alert('This patient has no completed test results');
+        return;
+      }
+
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['sms_completion_message']);
+
+      const settingsMap: Record<string, string> = {};
+      if (settings) {
+        settings.forEach((s: any) => {
+          settingsMap[s.key] = s.value;
+        });
+      }
+
+      const messageTemplate = settingsMap.sms_completion_message || 'Hello {patient_name}, your test results are ready. Please visit the clinic.';
+      const previewMessage = messageTemplate.replace(/{patient_name}/g, patient.name);
+
+      const confirmSend = confirm(
+        `Send SMS to ${patient.name}?\n\nPhone: ${patient.phone}\n\nMessage: "${previewMessage}"`
+      );
+      if (!confirmSend) return;
+
+      setSendingSmsFor(patient.id);
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('No active session');

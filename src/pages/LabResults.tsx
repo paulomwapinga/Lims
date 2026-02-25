@@ -219,13 +219,29 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
       return;
     }
 
-    const confirmSend = confirm(
-      `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "Hello ${visitTest.visit.patient.name}, your test results are ready. Please visit the clinic."`
-    );
-    if (!confirmSend) return;
-
-    setSendingSmsFor(visitTest.id);
     try {
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('key, value')
+        .in('key', ['sms_completion_message']);
+
+      const settingsMap: Record<string, string> = {};
+      if (settings) {
+        settings.forEach((s: any) => {
+          settingsMap[s.key] = s.value;
+        });
+      }
+
+      const messageTemplate = settingsMap.sms_completion_message || 'Hello {patient_name}, your test results are ready. Please visit the clinic.';
+      const previewMessage = messageTemplate.replace(/{patient_name}/g, visitTest.visit.patient.name);
+
+      const confirmSend = confirm(
+        `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "${previewMessage}"`
+      );
+      if (!confirmSend) return;
+
+      setSendingSmsFor(visitTest.id);
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         throw new Error('No active session');
