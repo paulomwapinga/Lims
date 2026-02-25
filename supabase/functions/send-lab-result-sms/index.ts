@@ -29,18 +29,32 @@ Deno.serve(async (req: Request) => {
     const token = authHeader.replace("Bearer ", "");
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser(token);
 
-    if (authError || !user) {
-      throw new Error("Unauthorized");
+    if (authError) {
+      console.error("Auth error:", authError);
+      throw new Error(`Authentication failed: ${authError.message}`);
     }
 
-    const { data: userProfile } = await supabaseClient
+    if (!user) {
+      throw new Error("No user found");
+    }
+
+    const { data: userProfile, error: profileError } = await supabaseClient
       .from("users")
       .select("role")
       .eq("id", user.id)
       .maybeSingle();
 
-    if (!userProfile || (userProfile.role !== "admin" && userProfile.role !== "doctor")) {
-      throw new Error("Unauthorized: Only admins and doctors can send SMS");
+    if (profileError) {
+      console.error("Profile error:", profileError);
+      throw new Error(`Failed to fetch user profile: ${profileError.message}`);
+    }
+
+    if (!userProfile) {
+      throw new Error("User profile not found");
+    }
+
+    if (userProfile.role !== "admin" && userProfile.role !== "doctor") {
+      throw new Error(`Unauthorized: Only admins and doctors can send SMS (current role: ${userProfile.role})`);
     }
 
     const { visit_test_id } = await req.json();
