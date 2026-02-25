@@ -16,6 +16,7 @@ import {
   Settings,
   ShoppingCart,
   History,
+  MessageSquare,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -46,6 +47,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
     { id: 'tests', label: 'Tests Management', icon: Settings },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'communication', label: 'Communication', icon: MessageSquare },
     { id: 'users', label: 'Users', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];

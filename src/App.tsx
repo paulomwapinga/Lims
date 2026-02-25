@@ -18,6 +18,7 @@ import LabResults from './pages/LabResults';
 import LabResultsEntry from './pages/LabResultsEntry';
 import LabResultsView from './pages/LabResultsView';
 import TestResults from './pages/TestResults';
+import Communication from './pages/Communication';
 
 function AppContent() {
   const { user, profile, loading, profileError, connectionError, retryConnection } = useAuth();
@@ -239,6 +240,8 @@ function AppContent() {
         return profile?.role === 'admin' ? <Tests /> : <Dashboard />;
       case 'reports':
         return profile?.role === 'admin' ? <Reports /> : <Dashboard />;
+      case 'communication':
+        return profile?.role === 'admin' ? <Communication /> : <Dashboard />;
       case 'users':
         return profile?.role === 'admin' ? <Users /> : <Dashboard />;
       case 'settings':
