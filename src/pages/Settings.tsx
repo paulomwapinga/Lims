@@ -132,6 +132,10 @@ export default function Settings() {
       } catch (error: any) {
         if (cancelled) return;
 
+        if (error.name === 'AbortError') {
+          return;
+        }
+
         console.error('Error loading settings:', error);
         setLoading(false);
         alert(`Failed to load settings: ${error.message}`);
