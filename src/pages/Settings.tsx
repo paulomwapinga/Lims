@@ -67,25 +67,13 @@ export default function Settings() {
   const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    const abortController = new AbortController();
     let mounted = true;
 
     const loadAllSettings = async () => {
       try {
-        const settingsPromise = supabase
-          .from('settings')
-          .select('*')
-          .abortSignal(abortController.signal);
-
-        const unitsPromise = supabase
-          .from('units')
-          .select('*')
-          .order('name')
-          .abortSignal(abortController.signal);
-
         const [settingsData, unitsData] = await Promise.all([
-          settingsPromise,
-          unitsPromise
+          supabase.from('settings').select('*'),
+          supabase.from('units').select('*').order('name')
         ]);
 
         if (!mounted) return;
@@ -131,13 +119,10 @@ export default function Settings() {
 
         setUnits(unitsData.data || []);
       } catch (error: any) {
-        if (error.name === 'AbortError' || !mounted) {
-          return;
-        }
+        if (!mounted) return;
+
         console.error('Error loading settings:', error);
-        if (mounted) {
-          alert(`Failed to load settings: ${error.message}`);
-        }
+        alert(`Failed to load settings: ${error.message}`);
       } finally {
         if (mounted) {
           setLoading(false);
@@ -149,7 +134,6 @@ export default function Settings() {
 
     return () => {
       mounted = false;
-      abortController.abort();
     };
   }, []);
 
