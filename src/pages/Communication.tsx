@@ -31,7 +31,7 @@ interface SmsLog {
   sent_at: string | null;
   created_at: string;
   sent_by: string;
-  users: {
+  sender: {
     full_name: string;
   };
 }
@@ -180,7 +180,7 @@ export default function Communication() {
         .from('sms_logs')
         .select(`
           *,
-          users:sent_by (full_name)
+          sender:sent_by (full_name)
         `)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -903,7 +903,7 @@ export default function Communication() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {log.users?.full_name}
+                            {log.sender?.full_name}
                           </td>
                         </tr>
                       ))}
