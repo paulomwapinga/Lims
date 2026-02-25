@@ -259,19 +259,31 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         }),
       });
 
-      const result = await response.json();
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse JSON response:', jsonError);
+        const text = await response.text();
+        console.error('Raw response:', text);
+        throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
+      }
 
       console.log('SMS Response:', { status: response.status, result });
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Failed to send SMS');
+        const errorMsg = result.error || result.message || 'Failed to send SMS';
+        console.error('SMS API Error:', errorMsg);
+        throw new Error(errorMsg);
       }
 
       alert('SMS sent successfully!');
       await loadVisitTests();
     } catch (error: any) {
-      console.error('Error sending SMS:', error);
-      alert(`Failed to send SMS: ${error.message || 'Unknown error'}`);
+      console.error('Error sending SMS (full):', error);
+      const errorMessage = error.message || 'Unknown error';
+      console.error('Error message:', errorMessage);
+      alert(`Failed to send SMS: ${errorMessage}`);
     } finally {
       setSendingSmsFor(null);
     }
