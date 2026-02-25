@@ -84,7 +84,23 @@ Deno.serve(async (req: Request) => {
       throw new Error("Visit test not found");
     }
 
-    const patient = visitTest.visit.patient;
+    console.log("Visit test data:", JSON.stringify(visitTest, null, 2));
+
+    if (!visitTest.visit) {
+      throw new Error("Visit data not found");
+    }
+
+    const visit = Array.isArray(visitTest.visit) ? visitTest.visit[0] : visitTest.visit;
+
+    if (!visit) {
+      throw new Error("Visit is null");
+    }
+
+    const patient = Array.isArray(visit.patient) ? visit.patient[0] : visit.patient;
+
+    if (!patient) {
+      throw new Error("Patient data not found");
+    }
 
     if (!patient.phone) {
       throw new Error("Patient has no phone number");
@@ -170,7 +186,7 @@ Deno.serve(async (req: Request) => {
     await supabaseClient
       .from("sms_log")
       .insert({
-        visit_id: visitTest.visit.id,
+        visit_id: visit.id,
         phone_number: patient.phone,
         message: message,
         sms_type: "test_results",
