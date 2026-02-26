@@ -16,7 +16,7 @@ interface Patient {
 
 interface User {
   id: string;
-  full_name: string;
+  name: string;
   phone: string;
   role: string;
 }
@@ -32,7 +32,7 @@ interface SmsLog {
   created_at: string;
   sent_by: string;
   sender?: {
-    full_name: string;
+    name: string;
   } | null;
 }
 
@@ -160,9 +160,9 @@ export default function Communication() {
     try {
       const { data, error } = await supabase
         .from('users')
-        .select('id, full_name, phone, role')
+        .select('id, name, phone, role')
         .not('phone', 'is', null)
-        .order('full_name');
+        .order('name');
 
       if (error) throw error;
       setUsers(data || []);
@@ -178,7 +178,7 @@ export default function Communication() {
         .from('sms_logs')
         .select(`
           *,
-          sender:sent_by(id, full_name)
+          sender:sent_by(id, name)
         `)
         .order('created_at', { ascending: false })
         .limit(200);
@@ -265,14 +265,14 @@ export default function Communication() {
         if (selectedUsers.length > 0) {
           const user = users.find(u => u.id === selectedUsers[0]);
           if (user) {
-            recipients.push({ type: 'user', id: user.id, phone: user.phone, name: user.full_name });
+            recipients.push({ type: 'user', id: user.id, phone: user.phone, name: user.name });
           }
         }
         break;
 
       case 'all_users':
         users.forEach(user => {
-          recipients.push({ type: 'user', id: user.id, phone: user.phone, name: user.full_name });
+          recipients.push({ type: 'user', id: user.id, phone: user.phone, name: user.name });
         });
         break;
 
@@ -729,7 +729,7 @@ export default function Communication() {
                               className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                             />
                             <div className="flex-1">
-                              <div className="text-sm font-medium text-gray-900">{user.full_name}</div>
+                              <div className="text-sm font-medium text-gray-900">{user.name}</div>
                               <div className="text-xs text-gray-500">{user.phone} - {user.role}</div>
                             </div>
                           </label>
@@ -921,7 +921,7 @@ export default function Communication() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {log.sender?.full_name || (log.sent_by ? 'System' : 'Unknown')}
+                            {log.sender?.name || (log.sent_by ? 'System' : 'Unknown')}
                           </td>
                           <td className="px-4 py-3 text-sm">
                             <button
