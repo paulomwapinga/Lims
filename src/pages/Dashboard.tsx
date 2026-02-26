@@ -1,12 +1,10 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { formatDate } from '../lib/dateFormat';
 import { getTodayStart, getDateStart, getDateEnd } from '../lib/timezone';
 import { Users, FlaskConical, AlertTriangle, TrendingUp } from 'lucide-react';
-import { useToast } from '../components/ToastContainer';
-import { playNotificationSound } from '../lib/notificationSound';
 
 interface Stats {
   todayVisits: number;
@@ -25,7 +23,6 @@ interface RevenueData {
 
 export default function Dashboard() {
   const { profile } = useAuth();
-  const { showToast } = useToast();
   const [stats, setStats] = useState<Stats>({
     todayVisits: 0,
     totalPatients: 0,
@@ -37,16 +34,10 @@ export default function Dashboard() {
   });
   const [revenueData, setRevenueData] = useState<RevenueData[]>([]);
   const [loading, setLoading] = useState(true);
-  const processedTestIds = useRef<Set<string>>(new Set());
-  const isInitialLoad = useRef(true);
 
   useEffect(() => {
     loadStats();
     loadRevenueChart();
-
-    setTimeout(() => {
-      isInitialLoad.current = false;
-    }, 2000);
 
     if (profile?.role === 'lab_tech') {
       const channel = supabase
@@ -54,45 +45,12 @@ export default function Dashboard() {
         .on(
           'postgres_changes',
           {
-            event: 'UPDATE',
+            event: '*',
             schema: 'public',
             table: 'visit_tests'
           },
-          async (payload) => {
+          () => {
             loadStats();
-
-            if (isInitialLoad.current) return;
-
-            const newRecord = payload.new as any;
-            const oldRecord = payload.old as any;
-
-            if (
-              newRecord.results_status === 'pending' &&
-              oldRecord.results_status === 'completed' &&
-              newRecord.sent_to_doctor_at &&
-              !processedTestIds.current.has(newRecord.id)
-            ) {
-              processedTestIds.current.add(newRecord.id);
-
-              const { data: testData } = await supabase
-                .from('visit_tests')
-                .select(`
-                  test:test_id(name),
-                  visit:visit_id(
-                    patient:patient_id(name)
-                  )
-                `)
-                .eq('id', newRecord.id)
-                .single();
-
-              if (testData) {
-                playNotificationSound();
-                showToast(
-                  `Test sent to lab: ${(testData as any).test?.name} for ${(testData as any).visit?.patient?.name}`,
-                  'info'
-                );
-              }
-            }
           }
         )
         .subscribe();
@@ -103,54 +61,6 @@ export default function Dashboard() {
     }
 
     if (profile?.role === 'admin' || profile?.role === 'doctor') {
-      const testsChannel = supabase
-        .channel('visit_tests_doctor_notifications')
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'visit_tests'
-          },
-          async (payload) => {
-            loadStats();
-
-            if (isInitialLoad.current) return;
-
-            const newRecord = payload.new as any;
-            const oldRecord = payload.old as any;
-
-            if (
-              newRecord.results_status === 'completed' &&
-              oldRecord.results_status !== 'completed' &&
-              newRecord.results_entered_at &&
-              !processedTestIds.current.has(newRecord.id)
-            ) {
-              processedTestIds.current.add(newRecord.id);
-
-              const { data: testData } = await supabase
-                .from('visit_tests')
-                .select(`
-                  test:test_id(name),
-                  visit:visit_id(
-                    patient:patient_id(name)
-                  )
-                `)
-                .eq('id', newRecord.id)
-                .single();
-
-              if (testData) {
-                playNotificationSound();
-                showToast(
-                  `Lab results ready: ${(testData as any).test?.name} for ${(testData as any).visit?.patient?.name}`,
-                  'success'
-                );
-              }
-            }
-          }
-        )
-        .subscribe();
-
       const visitsChannel = supabase
         .channel('visits_stats')
         .on(
@@ -198,7 +108,6 @@ export default function Dashboard() {
         .subscribe();
 
       return () => {
-        supabase.removeChannel(testsChannel);
         supabase.removeChannel(visitsChannel);
         supabase.removeChannel(inventoryChannel);
         supabase.removeChannel(patientsChannel);

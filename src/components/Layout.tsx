@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import NotificationsDropdown from './NotificationsDropdown';
+import RealtimeNotifications from './RealtimeNotifications';
 import {
   LayoutDashboard,
   Users,
@@ -64,6 +65,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <RealtimeNotifications />
       <div className="flex h-screen overflow-hidden">
         <aside
           className={`${
