@@ -24,6 +24,8 @@ interface SmsSettings {
   welcome_sms_enabled: boolean;
   welcome_sms_template: string;
   service_role_key: string;
+  lab_tech_auto_send_sms: boolean;
+  doctor_auto_send_sms: boolean;
 }
 
 interface Unit {
@@ -53,6 +55,8 @@ export default function Settings() {
     welcome_sms_enabled: false,
     welcome_sms_template: 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
     service_role_key: '',
+    lab_tech_auto_send_sms: false,
+    doctor_auto_send_sms: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,6 +118,8 @@ export default function Settings() {
           welcome_sms_enabled: settingsMap.welcome_sms_enabled === 'true',
           welcome_sms_template: settingsMap.welcome_sms_message || 'Welcome {patient_name}! Thank you for choosing {clinic_name}. We wish you good health.',
           service_role_key: '',
+          lab_tech_auto_send_sms: settingsMap.lab_tech_auto_send_sms === 'true',
+          doctor_auto_send_sms: settingsMap.doctor_auto_send_sms === 'true',
         });
 
         setUnits(unitsData || []);
@@ -144,6 +150,8 @@ export default function Settings() {
         { key: 'sms_completion_message', value: smsSettings.sms_template },
         { key: 'welcome_sms_enabled', value: smsSettings.welcome_sms_enabled ? 'true' : 'false' },
         { key: 'welcome_sms_message', value: smsSettings.welcome_sms_template },
+        { key: 'lab_tech_auto_send_sms', value: smsSettings.lab_tech_auto_send_sms ? 'true' : 'false' },
+        { key: 'doctor_auto_send_sms', value: smsSettings.doctor_auto_send_sms ? 'true' : 'false' },
       ];
 
       for (const setting of settingsToUpdate) {
@@ -860,11 +868,45 @@ export default function Settings() {
                 </p>
               </div>
 
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <h3 className="text-md font-semibold text-gray-900 mb-3">Automatic SMS Options</h3>
+
+                <div className="space-y-3">
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="lab_tech_auto_send_sms"
+                      checked={smsSettings.lab_tech_auto_send_sms}
+                      onChange={(e) => setSmsSettings({ ...smsSettings, lab_tech_auto_send_sms: e.target.checked })}
+                      disabled={!isAdmin}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
+                    />
+                    <label htmlFor="lab_tech_auto_send_sms" className="ml-2 block text-sm text-gray-700">
+                      Auto-send SMS to patient when lab tech completes test results
+                    </label>
+                  </div>
+
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="doctor_auto_send_sms"
+                      checked={smsSettings.doctor_auto_send_sms}
+                      onChange={(e) => setSmsSettings({ ...smsSettings, doctor_auto_send_sms: e.target.checked })}
+                      disabled={!isAdmin}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
+                    />
+                    <label htmlFor="doctor_auto_send_sms" className="ml-2 block text-sm text-gray-700">
+                      Auto-send SMS to doctor when results are sent to them
+                    </label>
+                  </div>
+                </div>
+              </div>
+
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm font-semibold text-blue-900 mb-2">Test Results SMS - How it works:</p>
                 <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
                   <li>Lab technician enters test results and marks as completed</li>
-                  <li>System automatically sends SMS to patient's phone number</li>
+                  <li>If enabled, system automatically sends SMS to patient's phone number</li>
                   <li>Patient receives notification that results are ready</li>
                 </ol>
               </div>
