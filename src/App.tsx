@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AuthProvider, useAuth } from './lib/auth';
 import { NotificationsProvider } from './lib/notifications';
+import { ToastProvider } from './components/ToastContainer';
 import Login from './pages/Login';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
@@ -265,9 +266,11 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <NotificationsProvider>
-        <AppContent />
-      </NotificationsProvider>
+      <ToastProvider>
+        <NotificationsProvider>
+          <AppContent />
+        </NotificationsProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }

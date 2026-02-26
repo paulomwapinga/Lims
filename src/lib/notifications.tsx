@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 import { useAuth } from './auth';
 import { getCurrentDateTime } from './timezone';
 import { playNotificationSound } from './notificationSound';
+import { useToast } from '../components/ToastContainer';
 
 interface Notification {
   id: string;
@@ -32,6 +33,8 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
   const previousUnreadCount = useRef<number>(0);
+  const { showToast } = useToast();
+  const processedNotificationIds = useRef<Set<string>>(new Set());
 
   const fetchNotifications = async (playSound: boolean = false) => {
     if (!user) {
@@ -50,13 +53,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       const newNotifications = data || [];
-      const currentUnreadCount = newNotifications.filter(n => !n.is_read).length;
 
-      if (playSound && currentUnreadCount > previousUnreadCount.current && previousUnreadCount.current >= 0) {
+      const newUnreadNotifications = newNotifications.filter(
+        n => !n.is_read && !processedNotificationIds.current.has(n.id)
+      );
+
+      if (playSound && newUnreadNotifications.length > 0) {
         playNotificationSound();
+
+        newUnreadNotifications.forEach(notif => {
+          processedNotificationIds.current.add(notif.id);
+          showToast(notif.message, 'info');
+        });
       }
 
-      previousUnreadCount.current = currentUnreadCount;
       setNotifications(newNotifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
