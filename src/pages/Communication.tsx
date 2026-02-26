@@ -176,27 +176,16 @@ export default function Communication() {
     try {
       const { data: logsData, error } = await supabase
         .from('sms_logs')
-        .select('*')
+        .select(`
+          *,
+          sender:sent_by(id, full_name)
+        `)
         .order('created_at', { ascending: false })
         .limit(200);
 
       if (error) throw error;
 
-      const userIds = [...new Set(logsData?.map(log => log.sent_by).filter(Boolean) || [])];
-
-      const { data: usersData } = await supabase
-        .from('users')
-        .select('id, full_name')
-        .in('id', userIds);
-
-      const usersMap = new Map(usersData?.map(u => [u.id, u]) || []);
-
-      const logsWithSender = logsData?.map(log => ({
-        ...log,
-        sender: usersMap.get(log.sent_by) || null
-      })) || [];
-
-      setSmsLogs(logsWithSender);
+      setSmsLogs(logsData || []);
     } catch (error: any) {
       console.error('Error loading SMS logs:', error);
       alert(`Failed to load SMS history: ${error.message}`);
@@ -469,6 +458,24 @@ export default function Communication() {
     } catch (error: any) {
       console.error('Error deleting template:', error);
       alert(`Failed to delete template: ${error.message}`);
+    }
+  };
+
+  const handleDeleteLog = async (id: string) => {
+    if (!confirm('Delete this SMS log?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('sms_logs')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      alert('SMS log deleted successfully');
+      loadSmsLogs();
+    } catch (error: any) {
+      console.error('Error deleting SMS log:', error);
+      alert(`Failed to delete SMS log: ${error.message}`);
     }
   };
 
@@ -875,6 +882,7 @@ export default function Communication() {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Message</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Sent By</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -913,7 +921,16 @@ export default function Communication() {
                             )}
                           </td>
                           <td className="px-4 py-3 text-sm text-gray-600">
-                            {log.sender?.full_name}
+                            {log.sender?.full_name || (log.sent_by ? 'System' : 'Unknown')}
+                          </td>
+                          <td className="px-4 py-3 text-sm">
+                            <button
+                              onClick={() => handleDeleteLog(log.id)}
+                              className="text-red-600 hover:text-red-800"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                           </td>
                         </tr>
                       ))}
