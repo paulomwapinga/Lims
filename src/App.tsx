@@ -30,6 +30,7 @@ function AppContent() {
   const [labResultsMode, setLabResultsMode] = useState<'list' | 'enter' | 'view'>('list');
   const [labResultsRefreshTrigger, setLabResultsRefreshTrigger] = useState(0);
   const [testResultsMode, setTestResultsMode] = useState<'list' | 'view'>('list');
+  const [previousPage, setPreviousPage] = useState<string>('dashboard');
 
   if (loading) {
     return (
@@ -107,6 +108,7 @@ function AppContent() {
   }
 
   function handleViewReceipt(visitId: string) {
+    setPreviousPage(currentPage);
     setReceiptVisitId(visitId);
     setCurrentPage('receipt');
   }
@@ -149,7 +151,7 @@ function AppContent() {
 
   function renderPage() {
     if (currentPage === 'receipt' && receiptVisitId) {
-      return <Receipt key={receiptVisitId} visitId={receiptVisitId} onClose={() => handleNavigate('dashboard')} />;
+      return <Receipt key={receiptVisitId} visitId={receiptVisitId} onClose={() => handleNavigate(previousPage)} />;
     }
 
     if (currentPage === 'lab-results') {
