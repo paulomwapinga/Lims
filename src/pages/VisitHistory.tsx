@@ -84,18 +84,22 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
         }
 
         const visitIds = visitsResult.data.map(v => v.id);
+        const visitIdSet = new Set(visitIds);
 
-        // Fetch ALL visit tests - Supabase has a default 1000 row limit, so we need to increase it
-        const { data: allVisitTests, error: testsError } = await supabase
+        // Fetch ALL visit tests without filtering by visit_id to avoid URL length limits
+        // Then filter in memory
+        const { data: allVisitTestsRaw, error: testsError } = await supabase
           .from('visit_tests')
           .select('visit_id, results_status')
-          .in('visit_id', visitIds)
-          .limit(100000); // Remove the default 1000 row limit
+          .limit(100000);
 
         if (testsError) {
           console.error('[VisitHistory] Error loading visit tests:', testsError);
           console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
         }
+
+        // Filter to only include tests for loaded visits
+        const allVisitTests = (allVisitTestsRaw || []).filter(test => visitIdSet.has(test.visit_id));
 
         if (!mounted) return;
 
@@ -192,17 +196,20 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
       }
 
       const visitIds = data.map(v => v.id);
+      const visitIdSet = new Set(visitIds);
 
       // Fetch ALL visit tests - Supabase has a default 1000 row limit
-      const { data: allVisitTests, error: testsError } = await supabase
+      const { data: allVisitTestsRaw, error: testsError } = await supabase
         .from('visit_tests')
         .select('visit_id, results_status')
-        .in('visit_id', visitIds)
-        .limit(100000); // Remove the default 1000 row limit
+        .limit(100000);
 
       if (testsError) {
         console.error('Error loading visit tests:', testsError);
       }
+
+      // Filter to only include tests for loaded visits
+      const allVisitTests = (allVisitTestsRaw || []).filter(test => visitIdSet.has(test.visit_id));
 
       const testsByVisit = (allVisitTests || []).reduce((acc: any, test) => {
         if (!acc[test.visit_id]) {
