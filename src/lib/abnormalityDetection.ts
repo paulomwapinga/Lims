@@ -125,6 +125,53 @@ function parseNumericValue(value: string): number | null {
   return isNaN(numValue) ? null : numValue;
 }
 
+function determineAbnormalityType(
+  value: string,
+  rule: InterpretationRule,
+  refRangeFrom: number | null,
+  refRangeTo: number | null
+): 'L' | 'H' | null {
+  if (rule.rule_type === 'numeric_comparison') {
+    switch (rule.operator) {
+      case '>':
+      case '>=':
+        return 'H';
+      case '<':
+      case '<=':
+        return 'L';
+      case '=':
+      case '!=':
+        const numValue = parseNumericValue(value);
+        if (numValue !== null) {
+          if (refRangeFrom !== null && numValue < refRangeFrom) {
+            return 'L';
+          }
+          if (refRangeTo !== null && numValue > refRangeTo) {
+            return 'H';
+          }
+        }
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  if (rule.rule_type === 'range') {
+    const numValue = parseNumericValue(value);
+    if (numValue !== null) {
+      if (refRangeFrom !== null && numValue < refRangeFrom) {
+        return 'L';
+      }
+      if (refRangeTo !== null && numValue > refRangeTo) {
+        return 'H';
+      }
+    }
+    return null;
+  }
+
+  return null;
+}
+
 export async function detectAbnormalityWithRules(
   value: string,
   parameterId: string,
@@ -136,7 +183,8 @@ export async function detectAbnormalityWithRules(
   for (const rule of rules) {
     if (applyInterpretationRule(value, rule)) {
       if (rule.result_status === 'abnormal' || rule.result_status === 'critical') {
-        return { isAbnormal: true, abnormalityType: 'H' };
+        const abnormalityType = determineAbnormalityType(value, rule, refRangeFrom, refRangeTo);
+        return { isAbnormal: true, abnormalityType };
       } else if (rule.result_status === 'normal') {
         return { isAbnormal: false, abnormalityType: null };
       }
