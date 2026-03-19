@@ -88,10 +88,11 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
         // Fetch ALL visit tests without filtering by visit_id to avoid URL length limits
         // Then filter in memory
+        // Note: Use range(0, 99999) to override Supabase's default 1000 row limit
         const { data: allVisitTestsRaw, error: testsError } = await supabase
           .from('visit_tests')
           .select('visit_id, results_status')
-          .limit(100000);
+          .range(0, 99999);
 
         if (testsError) {
           console.error('[VisitHistory] Error loading visit tests:', testsError);
