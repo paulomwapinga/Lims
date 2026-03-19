@@ -408,6 +408,9 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Diagnosis
                   </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Complaints
+                  </th>
                   {profile?.role !== 'doctor' && (
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                       Financial
@@ -471,6 +474,13 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                         <FileText className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
                         <span className="text-sm text-gray-700 truncate">
                           {visit.diagnosis || 'N/A'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="max-w-xs">
+                        <span className="text-sm text-gray-700 line-clamp-2">
+                          {visit.notes || 'N/A'}
                         </span>
                       </div>
                     </td>

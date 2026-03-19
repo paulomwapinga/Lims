@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Edit, Send, Trash2, MessageSquare } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2, MessageSquare, FileText, Stethoscope } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -20,6 +20,8 @@ interface VisitTest {
     id: string;
     created_at: string;
     doctor_id: string;
+    notes: string | null;
+    diagnosis: string | null;
     patient: {
       id: string;
       name: string;
@@ -94,6 +96,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             id,
             created_at,
             doctor_id,
+            notes,
+            diagnosis,
             patient:patients (
               id,
               name,
@@ -487,11 +491,33 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               ) : (
                 paginatedTests.map((vt) => (
                   <tr key={vt.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">
                         {vt.visit.patient.name}
                       </div>
                       <div className="text-sm text-gray-500">ID: {vt.visit.patient.id.slice(0, 8)}</div>
+                      {(vt.visit.notes || vt.visit.diagnosis) && (
+                        <div className="mt-2 space-y-1">
+                          {vt.visit.notes && (
+                            <div className="flex items-start gap-1 text-xs">
+                              <FileText className="w-3 h-3 text-amber-600 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <span className="font-medium text-amber-700">Complaints:</span>
+                                <p className="text-gray-600 line-clamp-2">{vt.visit.notes}</p>
+                              </div>
+                            </div>
+                          )}
+                          {vt.visit.diagnosis && (
+                            <div className="flex items-start gap-1 text-xs">
+                              <Stethoscope className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
+                              <div>
+                                <span className="font-medium text-blue-700">Diagnosis:</span>
+                                <p className="text-gray-600 line-clamp-2">{vt.visit.diagnosis}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>

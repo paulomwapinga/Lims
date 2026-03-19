@@ -405,6 +405,13 @@ export default function Receipt({ visitId, onClose }: ReceiptProps) {
           </div>
         </div>
 
+        {visit.notes && (
+          <div className="mb-6 bg-amber-50 p-4 rounded-lg border border-amber-200">
+            <p className="text-xs uppercase tracking-wide text-amber-600 font-semibold mb-2">Complaints / Notes</p>
+            <p className="font-medium text-gray-900 whitespace-pre-wrap">{visit.notes}</p>
+          </div>
+        )}
+
         {visit.diagnosis && (
           <div className="mb-6 bg-blue-50 p-4 rounded-lg border border-blue-200">
             <p className="text-xs uppercase tracking-wide text-blue-600 font-semibold mb-2">Diagnosis</p>
