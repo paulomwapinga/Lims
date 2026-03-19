@@ -85,10 +85,17 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
         const visitIds = visitsResult.data.map(v => v.id);
 
-        const { data: allVisitTests } = await supabase
+        const { data: allVisitTests, error: testsError } = await supabase
           .from('visit_tests')
           .select('visit_id, results_status')
           .in('visit_id', visitIds);
+
+        if (testsError) {
+          console.error('Error loading visit tests:', testsError);
+        }
+
+        console.log('Visit IDs:', visitIds);
+        console.log('All Visit Tests:', allVisitTests);
 
         if (!mounted) return;
 
@@ -186,10 +193,14 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
       const visitIds = data.map(v => v.id);
 
-      const { data: allVisitTests } = await supabase
+      const { data: allVisitTests, error: testsError } = await supabase
         .from('visit_tests')
         .select('visit_id, results_status')
         .in('visit_id', visitIds);
+
+      if (testsError) {
+        console.error('Error loading visit tests:', testsError);
+      }
 
       const testsByVisit = (allVisitTests || []).reduce((acc: any, test) => {
         if (!acc[test.visit_id]) {
