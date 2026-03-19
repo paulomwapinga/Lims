@@ -87,49 +87,33 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
         const visitIds = visitsResult.data.map(v => v.id);
         const visitIdSet = new Set(visitIds);
 
-        // Fetch ALL visit tests without filtering by visit_id to avoid URL length limits
-        // Then filter in memory
-        // Note: Use range(0, 99999) to override Supabase's default 1000 row limit
-        const { data: allVisitTestsRaw, error: testsError } = await supabase
-          .from('visit_tests')
-          .select('visit_id, results_status')
-          .range(0, 99999);
+        // Use SQL aggregation to get test counts - bypasses the 1000 row limit
+        const { data: testCounts, error: testsError } = await supabase.rpc('get_visit_test_counts');
 
         if (testsError) {
-          console.error('[VisitHistory] Error loading visit tests:', testsError);
+          console.error('[VisitHistory] Error loading visit test counts:', testsError);
           console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
         }
 
-        console.log('[VisitHistory] Total raw visit tests fetched:', allVisitTestsRaw?.length || 0);
-        console.log('[VisitHistory] Total visits loaded:', visitIds.length);
-
-        // Filter to only include tests for loaded visits
-        const allVisitTests = (allVisitTestsRaw || []).filter(test => visitIdSet.has(test.visit_id));
-
-        console.log('[VisitHistory] Filtered visit tests:', allVisitTests.length);
+        console.log('[VisitHistory] Test count records received:', testCounts?.length || 0);
 
         // Debug specific visit
         const debugVisitId = '4bc1fa6c-0369-4027-9142-138a6d6ebbc8';
-        const debugTests = allVisitTests.filter(t => t.visit_id === debugVisitId);
-        console.log(`[VisitHistory] Tests for visit ${debugVisitId}:`, debugTests);
+        const debugTestCount = testCounts?.find((t: any) => t.visit_id === debugVisitId);
+        console.log(`[VisitHistory] Test counts for visit ${debugVisitId}:`, debugTestCount);
 
         if (!mounted) return;
 
-        const testsByVisit = (allVisitTests || []).reduce((acc: any, test) => {
-          if (!acc[test.visit_id]) {
-            acc[test.visit_id] = { total: 0, pending: 0, inProgress: 0, completed: 0 };
-          }
-          acc[test.visit_id].total++;
-          if (test.results_status === 'pending') acc[test.visit_id].pending++;
-          if (test.results_status === 'in_progress') acc[test.visit_id].inProgress++;
-          if (test.results_status === 'completed') acc[test.visit_id].completed++;
+        // Convert array of counts to object keyed by visit_id
+        const testsByVisit = (testCounts || []).reduce((acc: any, row: any) => {
+          acc[row.visit_id] = {
+            total: Number(row.total) || 0,
+            pending: Number(row.pending) || 0,
+            inProgress: Number(row.in_progress) || 0,
+            completed: Number(row.completed) || 0
+          };
           return acc;
         }, {});
-
-        // Debug: check if specific visit is in loaded data
-        const debugVisit = visitsResult.data.find((v: any) => v.id === debugVisitId);
-        console.log('[VisitHistory] Debug visit in loaded data:', debugVisit ? 'YES' : 'NO', debugVisit);
-        console.log('[VisitHistory] Debug visit in visitIdSet:', visitIdSet.has(debugVisitId));
 
         const visitsWithTests = visitsResult.data.map((v: any) => {
           const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
