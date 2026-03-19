@@ -114,6 +114,7 @@ function AppContent() {
   }
 
   function handleNavigate(page: string) {
+    setPreviousPage(currentPage);
     setCurrentPage(page);
     setSelectedPatientId(null);
     setReceiptVisitId(null);
