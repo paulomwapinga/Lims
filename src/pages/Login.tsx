@@ -47,9 +47,9 @@ export default function Login() {
             <Stethoscope className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent text-center">
-            Remtullah Medical Laboratory - TESTING UPDATES
+            Remtullah Medical Laboratory
           </h1>
-          <p className="text-slate-600 text-sm mt-2 font-medium">Sign in to your account - Updates are working!</p>
+          <p className="text-slate-600 text-sm mt-2 font-medium">Sign in to your account</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5">
