@@ -63,7 +63,8 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             users(name)
           `
           )
-          .order('created_at', { ascending: false });
+          .order('created_at', { ascending: false })
+          .range(0, 99999);
 
         const [patientsResult, visitsResult] = await Promise.all([
           patientsPromise,
@@ -128,6 +129,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
         // Debug: check if specific visit is in loaded data
         const debugVisit = visitsResult.data.find((v: any) => v.id === debugVisitId);
         console.log('[VisitHistory] Debug visit in loaded data:', debugVisit ? 'YES' : 'NO', debugVisit);
+        console.log('[VisitHistory] Debug visit in visitIdSet:', visitIdSet.has(debugVisitId));
 
         const visitsWithTests = visitsResult.data.map((v: any) => {
           const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
