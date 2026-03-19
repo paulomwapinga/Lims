@@ -483,7 +483,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                       </td>
                     )}
                     <td className="px-6 py-4">
-                      {visit.tests_count ? (
+                      {(visit.tests_count ?? 0) > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
                           {visit.pending_tests! > 0 && (
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium">
