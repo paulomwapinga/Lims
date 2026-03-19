@@ -98,8 +98,18 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
           console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
         }
 
+        console.log('[VisitHistory] Total raw visit tests fetched:', allVisitTestsRaw?.length || 0);
+        console.log('[VisitHistory] Total visits loaded:', visitIds.length);
+
         // Filter to only include tests for loaded visits
         const allVisitTests = (allVisitTestsRaw || []).filter(test => visitIdSet.has(test.visit_id));
+
+        console.log('[VisitHistory] Filtered visit tests:', allVisitTests.length);
+
+        // Debug specific visit
+        const debugVisitId = '4bc1fa6c-0369-4027-9142-138a6d6ebbc8';
+        const debugTests = allVisitTests.filter(t => t.visit_id === debugVisitId);
+        console.log(`[VisitHistory] Tests for visit ${debugVisitId}:`, debugTests);
 
         if (!mounted) return;
 
@@ -113,6 +123,10 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
           if (test.results_status === 'completed') acc[test.visit_id].completed++;
           return acc;
         }, {});
+
+        // Debug: check if specific visit is in loaded data
+        const debugVisit = visitsResult.data.find((v: any) => v.id === debugVisitId);
+        console.log('[VisitHistory] Debug visit in loaded data:', debugVisit ? 'YES' : 'NO', debugVisit);
 
         const visitsWithTests = visitsResult.data.map((v: any) => {
           const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
