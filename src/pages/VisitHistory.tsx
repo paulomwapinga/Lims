@@ -85,20 +85,35 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
         const visitIds = visitsResult.data.map(v => v.id);
 
+        console.log('[VisitHistory] Loaded at:', new Date().toISOString());
+        console.log('[VisitHistory] Number of visits:', visitIds.length);
+        console.log('[VisitHistory] Visit IDs:', visitIds);
+        console.log('[VisitHistory] Sample visit ID:', visitIds[0]);
+
         const { data: allVisitTests, error: testsError } = await supabase
           .from('visit_tests')
           .select('visit_id, results_status')
           .in('visit_id', visitIds);
+
+        console.log('[VisitHistory] All Visit Tests:', allVisitTests);
+        console.log('[VisitHistory] Test count:', allVisitTests?.length || 0);
 
         if (testsError) {
           console.error('[VisitHistory] Error loading visit tests:', testsError);
           console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
         }
 
-        console.log('[VisitHistory] Loaded at:', new Date().toISOString());
-        console.log('[VisitHistory] Visit IDs:', visitIds);
-        console.log('[VisitHistory] All Visit Tests:', allVisitTests);
-        console.log('[VisitHistory] Test count:', allVisitTests?.length || 0);
+        const { data: sampleTest } = await supabase
+          .from('visit_tests')
+          .select('*')
+          .limit(5);
+        console.log('[VisitHistory] Sample tests from DB (first 5):', sampleTest);
+
+        const { data: allTests } = await supabase
+          .from('visit_tests')
+          .select('visit_id, results_status');
+        console.log('[VisitHistory] ALL tests from DB (no filter):', allTests);
+        console.log('[VisitHistory] Total tests in DB:', allTests?.length || 0);
 
         if (!mounted) return;
 
