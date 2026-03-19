@@ -91,11 +91,14 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
           .in('visit_id', visitIds);
 
         if (testsError) {
-          console.error('Error loading visit tests:', testsError);
+          console.error('[VisitHistory] Error loading visit tests:', testsError);
+          console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
         }
 
-        console.log('Visit IDs:', visitIds);
-        console.log('All Visit Tests:', allVisitTests);
+        console.log('[VisitHistory] Loaded at:', new Date().toISOString());
+        console.log('[VisitHistory] Visit IDs:', visitIds);
+        console.log('[VisitHistory] All Visit Tests:', allVisitTests);
+        console.log('[VisitHistory] Test count:', allVisitTests?.length || 0);
 
         if (!mounted) return;
 
