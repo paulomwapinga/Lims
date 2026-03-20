@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2, MessageSquare, FileText, Stethoscope } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2, MessageSquare, FileText, Stethoscope, X } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -47,6 +47,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState('');
   const itemsPerPage = 20;
 
   useEffect(() => {
@@ -462,6 +464,9 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                   Visit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Complaint
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Test
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -484,7 +489,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredTests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
                     No tests found
                   </td>
                 </tr>
@@ -496,34 +501,29 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                         {vt.visit.patient.name}
                       </div>
                       <div className="text-sm text-gray-500">ID: {vt.visit.patient.id.slice(0, 8)}</div>
-                      {(vt.visit.notes || vt.visit.diagnosis) && (
-                        <div className="mt-2 space-y-1">
-                          {vt.visit.notes && (
-                            <div className="flex items-start gap-1 text-xs">
-                              <FileText className="w-3 h-3 text-amber-600 mt-0.5 flex-shrink-0" />
-                              <div>
-                                <span className="font-medium text-amber-700">Complaints:</span>
-                                <p className="text-gray-600 line-clamp-2">{vt.visit.notes}</p>
-                              </div>
-                            </div>
-                          )}
-                          {vt.visit.diagnosis && (
-                            <div className="flex items-start gap-1 text-xs">
-                              <Stethoscope className="w-3 h-3 text-blue-600 mt-0.5 flex-shrink-0" />
-                              <div>
-                                <span className="font-medium text-blue-700">Diagnosis:</span>
-                                <p className="text-gray-600 line-clamp-2">{vt.visit.diagnosis}</p>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>
                       <div className="text-sm text-gray-500">
                         {formatDate(vt.visit.created_at)}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {vt.visit.notes ? (
+                        <button
+                          onClick={() => {
+                            setSelectedComplaint(vt.visit.notes);
+                            setShowComplaintModal(true);
+                          }}
+                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2"
+                          title="View complaint"
+                        >
+                          <Eye className="w-4 h-4" />
+                          <span className="text-sm font-medium">View</span>
+                        </button>
+                      ) : (
+                        <span className="text-sm text-gray-400">N/A</span>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{vt.test.name}</div>
@@ -652,6 +652,29 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
           onPageChange={setCurrentPage}
         />
       </div>
+
+      {showComplaintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
+              <h2 className="text-xl font-bold text-gray-900">Patient Complaint</h2>
+              <button
+                onClick={() => setShowComplaintModal(false)}
+                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {selectedComplaint}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
