@@ -113,14 +113,21 @@ function AppContent() {
     setCurrentPage('receipt');
   }
 
-  function handleNavigate(page: string) {
+  function handleNavigate(page: string, preservePatient: boolean = false) {
     setPreviousPage(currentPage);
     setCurrentPage(page);
-    setSelectedPatientId(null);
+    if (!preservePatient) {
+      setSelectedPatientId(null);
+    }
     setReceiptVisitId(null);
     setSelectedVisitTestId(null);
     setLabResultsMode('list');
     setTestResultsMode('list');
+  }
+
+  function handleCloseReceipt() {
+    const shouldPreservePatient = previousPage === 'visits';
+    handleNavigate(previousPage, shouldPreservePatient);
   }
 
   function handleEnterResults(visitTestId: string) {
@@ -152,7 +159,7 @@ function AppContent() {
 
   function renderPage() {
     if (currentPage === 'receipt' && receiptVisitId) {
-      return <Receipt key={receiptVisitId} visitId={receiptVisitId} onClose={() => handleNavigate(previousPage)} />;
+      return <Receipt key={receiptVisitId} visitId={receiptVisitId} onClose={handleCloseReceipt} />;
     }
 
     if (currentPage === 'lab-results') {
