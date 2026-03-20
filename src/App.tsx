@@ -126,8 +126,11 @@ function AppContent() {
   }
 
   function handleCloseReceipt() {
-    const shouldPreservePatient = previousPage === 'visits';
-    handleNavigate(previousPage, shouldPreservePatient);
+    if (previousPage === 'visits') {
+      handleNavigate('patients', false);
+    } else {
+      handleNavigate(previousPage, false);
+    }
   }
 
   function handleEnterResults(visitTestId: string) {
