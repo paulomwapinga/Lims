@@ -37,6 +37,8 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
   const itemsPerPage = 20;
 
   const [totalPatients, setTotalPatients] = useState(0);
+  const [showComplaintModal, setShowComplaintModal] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState('');
 
   useEffect(() => {
     let mounted = true;
@@ -478,10 +480,24 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="max-w-xs">
-                        <span className="text-sm text-gray-700 line-clamp-2">
-                          {visit.notes || 'N/A'}
-                        </span>
+                      <div className="flex items-center gap-2">
+                        <div className="max-w-xs flex-1">
+                          <span className="text-sm text-gray-700 line-clamp-2">
+                            {visit.notes || 'N/A'}
+                          </span>
+                        </div>
+                        {visit.notes && (
+                          <button
+                            onClick={() => {
+                              setSelectedComplaint(visit.notes);
+                              setShowComplaintModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded-lg transition-colors flex-shrink-0"
+                            title="View full complaint"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                     {profile?.role !== 'doctor' && (
@@ -565,6 +581,31 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
           onPageChange={setCurrentPage}
         />
       </div>
+
+      {showComplaintModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-white">Patient Complaint</h3>
+              <button
+                onClick={() => setShowComplaintModal(false)}
+                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                  {selectedComplaint}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
