@@ -481,22 +481,20 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="max-w-xs flex-1">
-                          <span className="text-sm text-gray-700 line-clamp-2">
-                            {visit.notes || 'N/A'}
-                          </span>
-                        </div>
-                        {visit.notes && (
+                        {visit.notes ? (
                           <button
                             onClick={() => {
                               setSelectedComplaint(visit.notes);
                               setShowComplaintModal(true);
                             }}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-1.5 rounded-lg transition-colors flex-shrink-0"
-                            title="View full complaint"
+                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2"
+                            title="View complaint"
                           >
                             <Eye className="w-4 h-4" />
+                            <span className="text-sm font-medium">View</span>
                           </button>
+                        ) : (
+                          <span className="text-sm text-gray-400">N/A</span>
                         )}
                       </div>
                     </td>
