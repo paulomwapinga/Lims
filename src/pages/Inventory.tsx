@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
-import { Plus, Package, AlertTriangle, ArrowUp, Edit2, Trash2, FlaskConical, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Package, AlertTriangle, ArrowUp, CreditCard as Edit2, Trash2, FlaskConical, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface InventoryItem {
@@ -40,6 +40,7 @@ export default function Inventory() {
   const [dialog, setDialog] = useState<DialogType>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'low'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -318,10 +319,15 @@ export default function Inventory() {
     }
   }
 
-  const filteredItems =
-    filter === 'low'
-      ? items.filter((item) => item.qty_on_hand <= item.reorder_level)
-      : items;
+  const filteredItems = items
+    .filter((item) => {
+      const matchesFilter = filter === 'all' || item.qty_on_hand <= item.reorder_level;
+      const matchesSearch =
+        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        item.unit.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesFilter && matchesSearch;
+    });
 
   const totalItems = filteredItems.length;
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -330,7 +336,7 @@ export default function Inventory() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filter]);
+  }, [filter, searchTerm]);
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -351,30 +357,44 @@ export default function Inventory() {
         )}
       </div>
 
-      <div className="flex space-x-4 mb-6">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded-lg ${
-            filter === 'all'
-              ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-700 border border-gray-300'
-          }`}
-        >
-          All Items ({items.length})
-        </button>
-        <button
-          onClick={() => setFilter('low')}
-          className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-            filter === 'low'
-              ? 'bg-red-600 text-white'
-              : 'bg-white text-gray-700 border border-gray-300'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>
-            Low Stock ({items.filter((item) => item.qty_on_hand <= item.reorder_level).length})
-          </span>
-        </button>
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex-1 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Search by name, type, or unit..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="flex space-x-4">
+          <button
+            onClick={() => setFilter('all')}
+            className={`px-4 py-2 rounded-lg ${
+              filter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300'
+            }`}
+          >
+            All Items ({items.length})
+          </button>
+          <button
+            onClick={() => setFilter('low')}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+              filter === 'low'
+                ? 'bg-red-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>
+              Low Stock ({items.filter((item) => item.qty_on_hand <= item.reorder_level).length})
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
