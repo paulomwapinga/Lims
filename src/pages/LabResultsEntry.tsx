@@ -37,6 +37,9 @@ interface VisitTestInfo {
       id: string;
       name: string;
       phone: string | null;
+      age: number;
+      age_unit: string;
+      gender: string;
     };
     doctor: {
       id: string;
@@ -114,7 +117,7 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
             created_at,
             patient_id,
             doctor_id,
-            patients(id, name, phone),
+            patients(id, name, phone, age, age_unit, gender),
             users!visits_doctor_id_fkey(id, name)
           `)
           .eq('id', visitTestData.visit_id)
@@ -144,7 +147,10 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           patient: {
             id: (visitData.data?.patients as any)?.id || '',
             name: (visitData.data?.patients as any)?.name || 'Unknown',
-            phone: (visitData.data?.patients as any)?.phone || null
+            phone: (visitData.data?.patients as any)?.phone || null,
+            age: (visitData.data?.patients as any)?.age || 0,
+            age_unit: (visitData.data?.patients as any)?.age_unit || 'years',
+            gender: (visitData.data?.patients as any)?.gender || 'Unknown'
           },
           doctor: {
             id: (visitData.data?.users as any)?.id || '',
@@ -635,6 +641,15 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
             <span className="font-semibold text-gray-900">{visitTest.visit.patient.name}</span>
             <span className="ml-2 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
               ID: {visitTest.visit.patient.id.slice(0, 8)}
+            </span>
+          </div>
+          <div className="flex items-center">
+            <span className="text-gray-500 font-medium min-w-[100px]">Age/Gender:</span>
+            <span className="font-semibold text-gray-900">
+              {visitTest.visit.patient.age} {visitTest.visit.patient.age_unit}
+            </span>
+            <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-gray-100">
+              {visitTest.visit.patient.gender}
             </span>
           </div>
           <div className="flex items-center">

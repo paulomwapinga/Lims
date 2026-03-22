@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
 import { formatDate, formatTime, formatDateTime } from '../lib/dateFormat';
-import { Search, Plus, User, Eye, Edit2, Trash2, FileText, Pill, X, Printer, MessageSquare } from 'lucide-react';
+import { Search, Plus, User, Eye, CreditCard as Edit2, Trash2, FileText, Pill, X, Printer, MessageSquare } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface Patient {
@@ -972,6 +972,12 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                         : (selectedPatient.dob ? calculateAge(selectedPatient.dob) : 'N/A')}
                     </p>
                   </div>
+                  {(profile?.role === 'admin' || profile?.role === 'doctor') && selectedPatient.marital_status && (
+                    <div>
+                      <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Marital Status</p>
+                      <p className="text-gray-900">{selectedPatient.marital_status}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
