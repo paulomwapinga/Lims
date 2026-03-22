@@ -674,7 +674,7 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           <div className="flex items-center">
             <span className="text-gray-500 font-medium min-w-[100px]">Visit Date:</span>
             <span className="font-semibold text-gray-900">
-              {formatDate(visitTest.visit.created_at)}
+              {formatDateTime(visitTest.visit.created_at)}
             </span>
           </div>
           <div className="flex items-center">
