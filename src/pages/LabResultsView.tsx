@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
-import { ArrowLeft, Printer, Edit, Trash2, Download, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Printer, CreditCard as Edit, Trash2, Download, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface TestParameter {
   id: string;
@@ -237,6 +237,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
           (a: TestResult, b: TestResult) =>
             a.test_parameter.sort_order - b.test_parameter.sort_order
         );
+        console.log('Test Results Data:', sortedResults);
         setResults(sortedResults);
       }
 
@@ -614,8 +615,8 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                                 HIGH (H)
                               </span>
                             ) : (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                ABNORMAL
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md" title={`Type: ${result.abnormality_type}, IsAbnormal: ${result.is_abnormal}`}>
+                                ABNORMAL {result.abnormality_type ? `(${result.abnormality_type})` : ''}
                               </span>
                             )
                           ) : (
