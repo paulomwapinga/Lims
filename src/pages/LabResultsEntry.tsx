@@ -246,7 +246,24 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
       abnormality_type: null,
       notes: ''
     };
-    newResults.set(parameterId, { ...existing, is_abnormal: isAbnormal });
+
+    let abnormalityType: 'L' | 'H' | null = null;
+
+    if (isAbnormal && existing.value) {
+      const parameter = parameters.find(p => p.id === parameterId);
+      if (parameter) {
+        const refFrom = parameter.ref_range_from ? parseFloat(parameter.ref_range_from) : null;
+        const refTo = parameter.ref_range_to ? parseFloat(parameter.ref_range_to) : null;
+        const detection = detectAbnormality(existing.value, refFrom, refTo);
+        abnormalityType = detection.abnormalityType;
+      }
+    }
+
+    newResults.set(parameterId, {
+      ...existing,
+      is_abnormal: isAbnormal,
+      abnormality_type: isAbnormal ? abnormalityType : null
+    });
     setResults(newResults);
   };
 
