@@ -1518,7 +1518,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                             : '-'}
                                     </td>
                                     <td className="py-4 px-5 text-sm text-center">
-                                      {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null ? (
+                                      {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null || result.is_abnormal ? (
                                         result.is_abnormal ? (
                                           result.abnormality_type === 'L' ? (
                                             <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
