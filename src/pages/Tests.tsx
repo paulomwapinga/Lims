@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
-import { Plus, FlaskConical, Edit2, Trash2, Package, ListChecks, GripVertical } from 'lucide-react';
+import { Plus, FlaskConical, CreditCard as Edit2, Trash2, Package, ListChecks, GripVertical, Search } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface Test {
@@ -56,6 +56,7 @@ export default function Tests() {
   const [editingParameterId, setEditingParameterId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -509,10 +510,15 @@ export default function Tests() {
     }
   }
 
-  const totalItems = tests.length;
+  const filteredTests = tests.filter(test =>
+    test.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    test.notes.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalItems = filteredTests.length;
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const paginatedTests = tests.slice(startIndex, endIndex);
+  const paginatedTests = filteredTests.slice(startIndex, endIndex);
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -531,6 +537,22 @@ export default function Tests() {
             <span>Add Test</span>
           </button>
         )}
+      </div>
+
+      <div className="mb-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search tests by name or notes..."
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
