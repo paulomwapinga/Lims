@@ -495,7 +495,14 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                 </tr>
               ) : (
                 paginatedTests.map((vt) => (
-                  <tr key={vt.id} className="hover:bg-gray-50">
+                  <tr
+                    key={vt.id}
+                    className={`
+                      ${vt.results_status === 'completed' ? 'bg-green-50 hover:bg-green-100' : ''}
+                      ${vt.results_status === 'pending' ? 'bg-yellow-50 hover:bg-yellow-100' : ''}
+                      ${vt.results_status === 'in_progress' ? 'bg-blue-50 hover:bg-blue-100' : ''}
+                    `}
+                  >
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-gray-900">
                         {vt.visit.patient.name}
