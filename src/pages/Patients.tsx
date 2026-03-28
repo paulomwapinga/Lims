@@ -63,6 +63,7 @@ interface TestResult {
   id: string;
   value: string;
   is_abnormal: boolean;
+  abnormality_type: string | null;
   notes: string | null;
   test_parameter: TestParameter;
 }
@@ -432,6 +433,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
             id,
             value,
             is_abnormal,
+            abnormality_type,
             notes,
             test_parameter:test_parameters (
               id,
@@ -1497,7 +1499,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                     <td className="py-4 px-5 text-sm text-center">
                                       {result.is_abnormal ? (
                                         <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                          ABNORMAL
+                                          {result.abnormality_type || 'ABNORMAL'}
                                         </span>
                                       ) : (
                                         <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
