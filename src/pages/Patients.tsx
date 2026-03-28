@@ -703,7 +703,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                 <td className="px-6 py-4 whitespace-nowrap text-gray-600">
                   {patient.age
                     ? `${patient.age} ${patient.age_unit || 'years'}`
-                    : (patient.dob ? calculateAge(patient.dob) : 'N/A')}
+                    : (patient.dob ? calculateAge(patient.dob).display : 'N/A')}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <div className="flex space-x-2">
@@ -992,7 +992,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                     <p className="text-gray-900">
                       {selectedPatient.age != null
                         ? `${selectedPatient.age} ${selectedPatient.age_unit || 'years'}`
-                        : (selectedPatient.dob ? `${calculateAge(selectedPatient.dob)} years` : 'N/A')}
+                        : (selectedPatient.dob ? calculateAge(selectedPatient.dob).display : 'N/A')}
                     </p>
                   </div>
                   {(profile?.role === 'admin' || profile?.role === 'doctor') && selectedPatient.marital_status && (
@@ -1646,13 +1646,52 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
   );
 }
 
-function calculateAge(dob: string): number {
-  const today = new Date();
+function calculateAge(dob: string): { value: number; unit: string; display: string } {
   const birthDate = new Date(dob);
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
+  const today = new Date();
+
+  let years = today.getFullYear() - birthDate.getFullYear();
+  let months = today.getMonth() - birthDate.getMonth();
+  let days = today.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months--;
+    const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += lastMonth.getDate();
   }
-  return age;
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  if (years === 0 && months === 0) {
+    return {
+      value: days,
+      unit: 'days',
+      display: `${days} ${days === 1 ? 'day' : 'days'}`
+    };
+  }
+
+  if (years === 0) {
+    return {
+      value: months,
+      unit: 'months',
+      display: `${months} ${months === 1 ? 'month' : 'months'}`
+    };
+  }
+
+  if (months === 0) {
+    return {
+      value: years,
+      unit: 'years',
+      display: `${years} ${years === 1 ? 'year' : 'years'}`
+    };
+  }
+
+  return {
+    value: years,
+    unit: 'years',
+    display: `${years} ${years === 1 ? 'year' : 'years'} ${months} ${months === 1 ? 'month' : 'months'}`
+  };
 }
