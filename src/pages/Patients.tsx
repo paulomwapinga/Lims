@@ -1518,24 +1518,28 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                             : '-'}
                                     </td>
                                     <td className="py-4 px-5 text-sm text-center">
-                                      {result.is_abnormal ? (
-                                        result.abnormality_type === 'L' ? (
-                                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
-                                            LOW (L)
-                                          </span>
-                                        ) : result.abnormality_type === 'H' ? (
-                                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                            HIGH (H)
-                                          </span>
+                                      {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null ? (
+                                        result.is_abnormal ? (
+                                          result.abnormality_type === 'L' ? (
+                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
+                                              LOW (L)
+                                            </span>
+                                          ) : result.abnormality_type === 'H' ? (
+                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                              HIGH (H)
+                                            </span>
+                                          ) : (
+                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                              ABNORMAL {result.abnormality_type ? `(${result.abnormality_type})` : ''}
+                                            </span>
+                                          )
                                         ) : (
-                                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                            ABNORMAL {result.abnormality_type ? `(${result.abnormality_type})` : ''}
+                                          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
+                                            NORMAL
                                           </span>
                                         )
                                       ) : (
-                                        <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
-                                          NORMAL
-                                        </span>
+                                        <span className="text-gray-400">-</span>
                                       )}
                                     </td>
                                   </tr>
