@@ -78,6 +78,7 @@ export default function Purchases() {
   const [selectedPurchaseItems, setSelectedPurchaseItems] = useState<PurchaseItemDetail[]>([]);
   const [dateFilter, setDateFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'completed'>('all');
+  const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +106,7 @@ export default function Purchases() {
     loadItems();
     loadUnits();
     loadSuppliers();
-  }, [dateFilter, statusFilter]);
+  }, [dateFilter, statusFilter, supplierFilter]);
 
   async function loadPurchases() {
     try {
@@ -116,6 +117,10 @@ export default function Purchases() {
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
+      }
+
+      if (supplierFilter !== 'all') {
+        query = query.eq('supplier_id', supplierFilter);
       }
 
       if (dateFilter === 'today') {
@@ -504,7 +509,7 @@ export default function Purchases() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateFilter, statusFilter]);
+  }, [dateFilter, statusFilter, supplierFilter]);
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -559,24 +564,56 @@ export default function Purchases() {
           </button>
         </div>
 
-        <div className="flex items-center justify-between bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center space-x-4">
-            <Calendar className="w-5 h-5 text-gray-500" />
-            <select
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Time</option>
-              <option value="today">Today</option>
-              <option value="week">Last 7 Days</option>
-              <option value="month">Last 30 Days</option>
-            </select>
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <Calendar className="w-5 h-5 text-gray-500" />
+              <select
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Time</option>
+                <option value="today">Today</option>
+                <option value="week">Last 7 Days</option>
+                <option value="month">Last 30 Days</option>
+              </select>
+              <ShoppingCart className="w-5 h-5 text-gray-500" />
+              <select
+                value={supplierFilter}
+                onChange={(e) => setSupplierFilter(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              >
+                <option value="all">All Suppliers</option>
+                {suppliers.map((supplier) => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Total Purchase Amount</p>
+              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPurchaseAmount)}</p>
+            </div>
           </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Total Purchase Amount</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPurchaseAmount)}</p>
-          </div>
+          {supplierFilter !== 'all' && (
+            <div className="flex items-center space-x-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <ShoppingCart className="w-4 h-4 text-blue-600" />
+              <span className="text-sm text-blue-700">
+                Showing purchases from:{' '}
+                <span className="font-semibold">
+                  {suppliers.find((s) => s.id === supplierFilter)?.name}
+                </span>
+              </span>
+              <button
+                onClick={() => setSupplierFilter('all')}
+                className="ml-auto text-blue-700 hover:text-blue-900"
+              >
+                <span className="text-lg">&times;</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
