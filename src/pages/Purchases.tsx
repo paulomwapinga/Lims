@@ -101,6 +101,11 @@ export default function Purchases() {
     unit_price: '',
   });
 
+  const [previousPurchasePrice, setPreviousPurchasePrice] = useState<{
+    unit_price: number;
+    purchase_date: string;
+  } | null>(null);
+
   useEffect(() => {
     loadPurchases();
     loadItems();
@@ -203,6 +208,37 @@ export default function Purchases() {
     }
   }
 
+  async function loadPreviousPurchasePrice(itemId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('purchase_items')
+        .select(`
+          unit_price,
+          purchase:purchases!inner (
+            purchase_date
+          )
+        `)
+        .eq('item_id', itemId)
+        .order('purchase(purchase_date)', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      if (data) {
+        setPreviousPurchasePrice({
+          unit_price: data.unit_price,
+          purchase_date: (data.purchase as any).purchase_date,
+        });
+      } else {
+        setPreviousPurchasePrice(null);
+      }
+    } catch (error) {
+      console.error('Error loading previous purchase price:', error);
+      setPreviousPurchasePrice(null);
+    }
+  }
+
   async function handleAddItem(e: FormEvent) {
     e.preventDefault();
 
@@ -238,6 +274,7 @@ export default function Purchases() {
     ]);
 
     setItemForm({ item_id: '', quantity: '', unit: '', unit_price: '' });
+    setPreviousPurchasePrice(null);
     setSearchTerm('');
   }
 
@@ -488,6 +525,7 @@ export default function Purchases() {
 
   function closeDialog() {
     setShowDialog(false);
+    setPreviousPurchasePrice(null);
   }
 
   function calculateItemTotal() {
@@ -1058,6 +1096,12 @@ export default function Purchases() {
                           item_id: e.target.value,
                           unit: matchedUnit
                         });
+
+                        if (e.target.value) {
+                          loadPreviousPurchasePrice(e.target.value);
+                        } else {
+                          setPreviousPurchasePrice(null);
+                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
@@ -1147,6 +1191,12 @@ export default function Purchases() {
                         placeholder="Price per unit"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
+                      {previousPurchasePrice && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Last purchased at {formatCurrency(previousPurchasePrice.unit_price)} on{' '}
+                          {formatDate(previousPurchasePrice.purchase_date)}
+                        </p>
+                      )}
                     </div>
 
                     <div>
