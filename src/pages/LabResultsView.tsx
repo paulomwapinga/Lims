@@ -611,7 +611,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                                 : '-'}
                         </td>
                         <td className="py-4 px-5 text-sm text-center">
-                          {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null || result.is_abnormal ? (
+                          {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null ? (
                             result.is_abnormal ? (
                               result.abnormality_type === 'L' ? (
                                 <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
@@ -624,8 +624,8 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                                   HIGH (H)
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md" title={`Type: ${result.abnormality_type}, IsAbnormal: ${result.is_abnormal}`}>
-                                  ABNORMAL {result.abnormality_type ? `(${result.abnormality_type})` : ''}
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                  ABNORMAL
                                 </span>
                               )
                             ) : (
@@ -634,7 +634,13 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                               </span>
                             )
                           ) : (
-                            <span className="text-gray-400">-</span>
+                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg font-bold text-xs shadow-md ${
+                              result.is_abnormal
+                                ? 'bg-red-600 text-white'
+                                : 'bg-gray-100 text-gray-700'
+                            }`}>
+                              {result.value}
+                            </span>
                           )}
                         </td>
                       </tr>
