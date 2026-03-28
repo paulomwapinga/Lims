@@ -1408,7 +1408,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                     <span> ({testResultData.visitTest.visit.patient.age} {testResultData.visitTest.visit.patient.age_unit || 'years'})</span>
                                   )}
                                   {!testResultData.visitTest.visit.patient.age && testResultData.visitTest.visit.patient.dob && (
-                                    <span> ({calculateAgeFromDOB(testResultData.visitTest.visit.patient.dob)} years)</span>
+                                    <span> ({calculateAge(testResultData.visitTest.visit.patient.dob).display})</span>
                                   )}
                                 </span>
                               </div>
