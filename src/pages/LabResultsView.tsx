@@ -634,13 +634,15 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                               </span>
                             )
                           ) : (
-                            <span className={`inline-flex items-center px-3 py-1.5 rounded-lg font-bold text-xs shadow-md ${
-                              result.is_abnormal
-                                ? 'bg-red-600 text-white'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {result.value}
-                            </span>
+                            result.is_abnormal ? (
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                ABNORMAL
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
+                                NORMAL
+                              </span>
+                            )
                           )}
                         </td>
                       </tr>
