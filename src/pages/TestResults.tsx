@@ -445,7 +445,7 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>
                         <div className="text-sm text-gray-500">
-                          {formatDate(vt.visit.created_at)}
+                          {formatDateTime(vt.visit.created_at)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
