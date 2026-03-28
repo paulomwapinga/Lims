@@ -490,7 +490,13 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                   <div>
                     <span className="text-xs uppercase tracking-wider text-blue-600 font-bold block mb-1">Date of Birth</span>
                     <span className="text-gray-900 font-semibold">
-                      {formatDate(visitTest.visit.patient.dob)} <span className="text-sm">({calculateAge(visitTest.visit.patient.dob).display})</span>
+                      {visitTest.visit.patient.dob ? (
+                        <>
+                          {formatDate(visitTest.visit.patient.dob)} <span className="text-sm">({calculateAge(visitTest.visit.patient.dob).display})</span>
+                        </>
+                      ) : (
+                        'N/A'
+                      )}
                     </span>
                   </div>
                   <div>
