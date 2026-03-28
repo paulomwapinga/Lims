@@ -55,6 +55,10 @@ interface LabResultsViewProps {
 }
 
 const calculateAge = (dob: string): { value: number; unit: string; display: string } => {
+  if (!dob) {
+    return { value: 0, unit: 'years', display: 'Unknown' };
+  }
+
   const birthDate = new Date(dob);
   const today = new Date();
 
@@ -73,6 +77,7 @@ const calculateAge = (dob: string): { value: number; unit: string; display: stri
     months += 12;
   }
 
+  // For very young patients (less than 1 year)
   if (years === 0 && months === 0) {
     return {
       value: days,
@@ -81,6 +86,7 @@ const calculateAge = (dob: string): { value: number; unit: string; display: stri
     };
   }
 
+  // For infants (less than 1 year old)
   if (years === 0) {
     return {
       value: months,
@@ -89,10 +95,14 @@ const calculateAge = (dob: string): { value: number; unit: string; display: stri
     };
   }
 
+  // For everyone else, show years and optionally months
+  const yearText = `${years} ${years === 1 ? 'year' : 'years'}`;
+  const monthText = months > 0 ? ` ${months} ${months === 1 ? 'month' : 'months'}` : '';
+
   return {
     value: years,
     unit: 'years',
-    display: `${years} ${years === 1 ? 'year' : 'years'}${months > 0 ? ` ${months} ${months === 1 ? 'month' : 'months'}` : ''}`
+    display: `${yearText}${monthText}`
   };
 };
 
