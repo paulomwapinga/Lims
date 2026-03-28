@@ -12,11 +12,21 @@ interface Purchase {
   purchase_date: string;
   total_amount: number;
   supplier: string;
+  supplier_id: string | null;
   notes: string;
   items_count: number;
   status: 'draft' | 'completed';
   completed_at: string | null;
   created_at: string;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  contact_person: string | null;
+  phone: string | null;
+  email: string | null;
+  address: string | null;
 }
 
 interface PurchaseItemDetail {
@@ -60,6 +70,7 @@ export default function Purchases() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -71,10 +82,14 @@ export default function Purchases() {
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
+  const [saveNewSupplier, setSaveNewSupplier] = useState(false);
 
   const [formData, setFormData] = useState({
     purchase_date: getTodayDateString(),
     supplier: '',
+    supplier_id: null as string | null,
     notes: '',
   });
 
@@ -89,13 +104,14 @@ export default function Purchases() {
     loadPurchases();
     loadItems();
     loadUnits();
+    loadSuppliers();
   }, [dateFilter, statusFilter]);
 
   async function loadPurchases() {
     try {
       let query = supabase
         .from('purchases')
-        .select('id, purchase_date, total_amount, supplier, notes, status, completed_at, created_at')
+        .select('id, purchase_date, total_amount, supplier, supplier_id, notes, status, completed_at, created_at')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
@@ -168,6 +184,20 @@ export default function Purchases() {
     }
   }
 
+  async function loadSuppliers() {
+    try {
+      const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .order('name');
+
+      if (error) throw error;
+      setSuppliers(data || []);
+    } catch (error) {
+      console.error('Error loading suppliers:', error);
+    }
+  }
+
   async function handleAddItem(e: FormEvent) {
     e.preventDefault();
 
@@ -227,6 +257,36 @@ export default function Purchases() {
     }
 
     try {
+      let supplierId = formData.supplier_id;
+
+      if (saveNewSupplier && !formData.supplier_id && formData.supplier.trim()) {
+        const { data: existingSupplier } = await supabase
+          .from('suppliers')
+          .select('id')
+          .eq('name', formData.supplier.trim())
+          .maybeSingle();
+
+        if (existingSupplier) {
+          supplierId = existingSupplier.id;
+        } else {
+          const { data: newSupplier, error: supplierError } = await supabase
+            .from('suppliers')
+            .insert({
+              name: formData.supplier.trim(),
+              created_by: user.id,
+            })
+            .select()
+            .single();
+
+          if (supplierError) {
+            console.error('Error saving supplier:', supplierError);
+          } else if (newSupplier) {
+            supplierId = newSupplier.id;
+            await loadSuppliers();
+          }
+        }
+      }
+
       const grandTotal = calculateGrandTotal();
       const status = saveAsDraft ? 'draft' : 'completed';
       const completedAt = saveAsDraft ? null : getCurrentDateTime();
@@ -237,6 +297,7 @@ export default function Purchases() {
           purchase_date: formData.purchase_date,
           total_amount: grandTotal,
           supplier: formData.supplier,
+          supplier_id: supplierId,
           notes: formData.notes,
           status,
           completed_at: completedAt,
@@ -403,6 +464,7 @@ export default function Purchases() {
     setFormData({
       purchase_date: formatDateTimeForInput(new Date()),
       supplier: '',
+      supplier_id: null,
       notes: '',
     });
     setItemForm({
@@ -413,6 +475,9 @@ export default function Purchases() {
     });
     setPurchaseItems([]);
     setSearchTerm('');
+    setSupplierSearch('');
+    setShowSupplierDropdown(false);
+    setSaveNewSupplier(false);
     setShowDialog(true);
   }
 
@@ -758,17 +823,108 @@ export default function Purchases() {
                   />
                 </div>
 
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    placeholder="Supplier name"
+                    onChange={(e) => {
+                      setFormData({ ...formData, supplier: e.target.value, supplier_id: null });
+                      setSupplierSearch(e.target.value);
+                      setShowSupplierDropdown(true);
+                      setSaveNewSupplier(false);
+                    }}
+                    onFocus={() => setShowSupplierDropdown(true)}
+                    placeholder="Type to search or enter new supplier"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
+                  {showSupplierDropdown && formData.supplier && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {suppliers
+                        .filter((s) =>
+                          s.name.toLowerCase().includes(formData.supplier.toLowerCase())
+                        )
+                        .map((supplier) => (
+                          <div
+                            key={supplier.id}
+                            onClick={() => {
+                              setFormData({
+                                ...formData,
+                                supplier: supplier.name,
+                                supplier_id: supplier.id,
+                              });
+                              setShowSupplierDropdown(false);
+                              setSaveNewSupplier(false);
+                            }}
+                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                          >
+                            <div className="font-medium text-gray-900">{supplier.name}</div>
+                            {supplier.contact_person && (
+                              <div className="text-xs text-gray-500">Contact: {supplier.contact_person}</div>
+                            )}
+                            {supplier.phone && (
+                              <div className="text-xs text-gray-500">Phone: {supplier.phone}</div>
+                            )}
+                          </div>
+                        ))}
+                      {!formData.supplier_id &&
+                        formData.supplier.trim() &&
+                        !suppliers.some(
+                          (s) => s.name.toLowerCase() === formData.supplier.toLowerCase()
+                        ) && (
+                          <div
+                            onClick={() => {
+                              setSaveNewSupplier(true);
+                              setShowSupplierDropdown(false);
+                            }}
+                            className="px-4 py-2 hover:bg-green-50 cursor-pointer border-t-2 border-green-200 bg-green-50"
+                          >
+                            <div className="font-medium text-green-700 flex items-center">
+                              <Plus className="w-4 h-4 mr-2" />
+                              Save "{formData.supplier}" as new supplier
+                            </div>
+                            <div className="text-xs text-green-600 mt-1">
+                              This will save the supplier for future use
+                            </div>
+                          </div>
+                        )}
+                    </div>
+                  )}
+                  {saveNewSupplier && (
+                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center text-sm text-green-700">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Will save "{formData.supplier}" as new supplier
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setSaveNewSupplier(false)}
+                        className="text-green-700 hover:text-green-900"
+                      >
+                        <span className="text-lg">&times;</span>
+                      </button>
+                    </div>
+                  )}
+                  {formData.supplier_id && (
+                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center text-sm text-blue-700">
+                        <CheckCircle className="w-4 h-4 mr-2" />
+                        Using saved supplier
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData({ ...formData, supplier: '', supplier_id: null });
+                          setSaveNewSupplier(false);
+                        }}
+                        className="text-blue-700 hover:text-blue-900"
+                      >
+                        <span className="text-lg">&times;</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
