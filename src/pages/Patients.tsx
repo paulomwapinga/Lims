@@ -967,9 +967,9 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                   <div>
                     <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Age</p>
                     <p className="text-gray-900">
-                      {selectedPatient.age
+                      {selectedPatient.age != null
                         ? `${selectedPatient.age} ${selectedPatient.age_unit || 'years'}`
-                        : (selectedPatient.dob ? calculateAge(selectedPatient.dob) : 'N/A')}
+                        : (selectedPatient.dob ? `${calculateAge(selectedPatient.dob)} years` : 'N/A')}
                     </p>
                   </div>
                   {(profile?.role === 'admin' || profile?.role === 'doctor') && selectedPatient.marital_status && (
