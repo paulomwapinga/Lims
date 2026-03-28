@@ -89,18 +89,10 @@ const calculateAge = (dob: string): { value: number; unit: string; display: stri
     };
   }
 
-  if (months === 0) {
-    return {
-      value: years,
-      unit: 'years',
-      display: `${years} ${years === 1 ? 'year' : 'years'}`
-    };
-  }
-
   return {
     value: years,
     unit: 'years',
-    display: `${years} ${years === 1 ? 'year' : 'years'} ${months} ${months === 1 ? 'month' : 'months'}`
+    display: `${years} ${years === 1 ? 'year' : 'years'}${months > 0 ? ` ${months} ${months === 1 ? 'month' : 'months'}` : ''}`
   };
 };
 
