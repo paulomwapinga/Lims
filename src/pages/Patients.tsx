@@ -964,6 +964,12 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                     <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Gender</p>
                     <p className="text-gray-900">{selectedPatient.gender}</p>
                   </div>
+                  {selectedPatient.dob && (
+                    <div>
+                      <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Date of Birth</p>
+                      <p className="text-gray-900">{formatDate(selectedPatient.dob)}</p>
+                    </div>
+                  )}
                   <div>
                     <p className="text-xs text-blue-600 font-semibold uppercase mb-1">Age</p>
                     <p className="text-gray-900">
