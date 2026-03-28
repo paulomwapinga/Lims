@@ -400,33 +400,39 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     setLoadingTestResult(true);
 
     try {
-      const [visitTestData, resultsData, keyValueData, signatureData] = await Promise.all([
-        supabase
-          .from('visit_tests')
-          .select(`
+      // Fetch visit test data first to get results_entered_by
+      const visitTestData = await supabase
+        .from('visit_tests')
+        .select(`
+          id,
+          results_status,
+          results_entered_at,
+          results_entered_by,
+          technician_notes,
+          visit:visits (
             id,
-            results_status,
-            results_entered_at,
-            results_entered_by,
-            technician_notes,
-            visit:visits (
+            created_at,
+            patient:patients (
               id,
-              created_at,
-              patient:patients (
-                id,
-                name,
-                dob,
-                age,
-                age_unit,
-                gender
-              )
-            ),
-            test:tests (
-              name
+              name,
+              dob,
+              age,
+              age_unit,
+              gender
             )
-          `)
-          .eq('id', visitTestId)
-          .maybeSingle(),
+          ),
+          test:tests (
+            name
+          )
+        `)
+        .eq('id', visitTestId)
+        .maybeSingle();
+
+      if (visitTestData.error) throw visitTestData.error;
+      if (!visitTestData.data) throw new Error('Test result not found');
+
+      // Now fetch everything else in parallel, including user data if needed
+      const promises = [
         supabase
           .from('visit_test_results')
           .select(`
@@ -450,17 +456,24 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           .eq('visit_test_id', visitTestId),
         supabase
           .from('settings')
-          .select('key, value'),
-        supabase
-          .from('settings')
-          .select('signature_image')
-          .not('signature_image', 'is', null)
-          .limit(1)
-          .maybeSingle()
-      ]);
+          .select('key, value, signature_image')
+      ];
 
-      if (visitTestData.error) throw visitTestData.error;
-      if (!visitTestData.data) throw new Error('Test result not found');
+      // Add user query if results_entered_by exists
+      if (visitTestData.data.results_entered_by) {
+        promises.push(
+          supabase
+            .from('users')
+            .select('name, role')
+            .eq('id', visitTestData.data.results_entered_by)
+            .maybeSingle()
+        );
+      }
+
+      const results = await Promise.all(promises);
+      const resultsData = results[0];
+      const settingsData = results[1];
+      const userData = results[2];
 
       const sortedResults = resultsData.data
         ? (resultsData.data as any).sort(
@@ -470,31 +483,21 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
         : [];
 
       let settingsMap: any = null;
-      if (keyValueData.data) {
+      if (settingsData.data) {
         settingsMap = {};
-        keyValueData.data.forEach((item: any) => {
+        settingsData.data.forEach((item: any) => {
           settingsMap[item.key] = item.value;
+          if (item.signature_image) {
+            settingsMap.signature_image = item.signature_image;
+          }
         });
-      }
-
-      if (signatureData.data?.signature_image) {
-        if (!settingsMap) settingsMap = {};
-        settingsMap.signature_image = signatureData.data.signature_image;
       }
 
       let enteredByName = null;
       let enteredByRole = null;
-      if (visitTestData.data?.results_entered_by) {
-        const { data: userData } = await supabase
-          .from('users')
-          .select('name, role')
-          .eq('id', visitTestData.data.results_entered_by)
-          .maybeSingle();
-
-        if (userData) {
-          enteredByName = userData.name;
-          enteredByRole = userData.role;
-        }
+      if (userData?.data) {
+        enteredByName = userData.data.name;
+        enteredByRole = userData.data.role;
       }
 
       setTestResultData({
