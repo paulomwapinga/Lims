@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
-import { Search, Plus, Trash2, Save, Package, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Search, Plus, Trash2, Save, Package, AlertTriangle, CheckCircle, Eye, X } from 'lucide-react';
 
 interface Patient {
   id: string;
@@ -89,6 +89,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
   const [showTestDialog, setShowTestDialog] = useState(false);
   const [showMedicineDialog, setShowMedicineDialog] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showDiagnosisModal, setShowDiagnosisModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   const [testForm, setTestForm] = useState({ test_id: '', qty: '1' });
@@ -554,7 +555,20 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Diagnosis</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-semibold text-gray-700">Diagnosis</label>
+                  {formData.diagnosis && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDiagnosisModal(true)}
+                      className="flex items-center space-x-1 text-blue-600 hover:text-blue-700 text-sm font-medium"
+                      title="View full diagnosis"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>View</span>
+                    </button>
+                  )}
+                </div>
                 <textarea
                   value={formData.diagnosis}
                   onChange={(e) => setFormData({ ...formData, diagnosis: e.target.value })}
@@ -1033,6 +1047,35 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showDiagnosisModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 max-w-2xl w-full shadow-2xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-900">Diagnosis</h2>
+              <button
+                onClick={() => setShowDiagnosisModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6">
+              <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
+                {formData.diagnosis || 'No diagnosis entered'}
+              </p>
+            </div>
+            <div className="flex justify-end mt-6">
+              <button
+                onClick={() => setShowDiagnosisModal(false)}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm hover:shadow-md transition-all"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
