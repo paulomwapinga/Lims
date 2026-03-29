@@ -86,6 +86,8 @@ export default function Purchases() {
   const [supplierSearch, setSupplierSearch] = useState('');
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
   const [saveNewSupplier, setSaveNewSupplier] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'complete' | null>(null);
 
   const [formData, setFormData] = useState({
     purchase_date: getTodayDateString(),
@@ -282,7 +284,7 @@ export default function Purchases() {
     setPurchaseItems(purchaseItems.filter((_, i) => i !== index));
   }
 
-  async function handleSubmit(saveAsDraft: boolean = false) {
+  function handleSubmit(saveAsDraft: boolean = false) {
     if (!user) {
       alert('You must be logged in to add purchases');
       return;
@@ -297,6 +299,20 @@ export default function Purchases() {
       alert('Please enter supplier name');
       return;
     }
+
+    if (!saveAsDraft) {
+      setConfirmAction('complete');
+      setShowConfirmDialog(true);
+    } else {
+      completePurchase(true);
+    }
+  }
+
+  async function completePurchase(saveAsDraft: boolean = false) {
+    if (!user) return;
+
+    setShowConfirmDialog(false);
+    setConfirmAction(null);
 
     try {
       let supplierId = formData.supplier_id;
@@ -324,7 +340,7 @@ export default function Purchases() {
             console.error('Error saving supplier:', supplierError);
           } else if (newSupplier) {
             supplierId = newSupplier.id;
-            await loadSuppliers();
+            setSuppliers([...suppliers, newSupplier]);
           }
         }
       }
@@ -380,9 +396,14 @@ export default function Purchases() {
         }
       }
 
+      const newPurchaseWithCount = {
+        ...purchaseData,
+        items_count: purchaseItems.length,
+      };
+      setPurchases([newPurchaseWithCount, ...purchases]);
+
       alert(saveAsDraft ? 'Purchase saved as draft!' : 'Purchase completed successfully!');
       closeDialog();
-      loadPurchases();
       loadItems();
     } catch (error) {
       console.error('Error saving purchase:', error);
@@ -1302,6 +1323,53 @@ export default function Purchases() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showConfirmDialog && confirmAction === 'complete' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-xl font-bold mb-4">Confirm Purchase Completion</h3>
+            <p className="text-gray-600 mb-2">
+              Are you sure you want to complete this purchase?
+            </p>
+            <div className="bg-gray-50 rounded-lg p-4 mb-6">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Supplier:</span>
+                  <span className="font-semibold">{formData.supplier}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Items:</span>
+                  <span className="font-semibold">{purchaseItems.length} item{purchaseItems.length !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Total Amount:</span>
+                  <span className="font-semibold text-green-600">{formatCurrency(calculateGrandTotal())}</span>
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-gray-500 mb-6">
+              This will update the inventory quantities and cannot be undone easily.
+            </p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setConfirmAction(null);
+                }}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => completePurchase(false)}
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              >
+                Confirm & Complete
+              </button>
             </div>
           </div>
         </div>
