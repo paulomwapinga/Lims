@@ -211,7 +211,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
         if (error) throw error;
       } else {
-        const { error } = await supabase.from('patients').insert({
+        const { data: newPatient, error } = await supabase.from('patients').insert({
           name: formData.name,
           phone: formData.phone,
           gender: formData.gender,
@@ -220,15 +220,22 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           age_unit: formData.age ? formData.age_unit : null,
           address: formData.address,
           marital_status: formData.marital_status || null,
-        });
+        }).select().single();
 
         if (error) throw error;
+
+        if (newPatient) {
+          setPatients([newPatient, ...patients]);
+        }
       }
 
       setFormData({ name: '', phone: '', gender: '', dob: '', age: '', age_unit: 'years', address: '', marital_status: '' });
       setEditingPatient(null);
       setShowForm(false);
-      loadPatients();
+
+      if (editingPatient) {
+        loadPatients();
+      }
     } catch (error) {
       console.error('Error saving patient:', error);
       alert('Failed to save patient');
