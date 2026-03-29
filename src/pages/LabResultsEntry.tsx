@@ -70,15 +70,54 @@ interface LabResultsEntryProps {
   onSaved?: () => void;
 }
 
-function calculateAgeFromDOB(dob: string): number {
+function calculateAgeFromDOB(dob: string): { value: number; unit: string; display: string } {
   const birthDate = new Date(dob);
   const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
+
+  let years = today.getFullYear() - birthDate.getFullYear();
+  let months = today.getMonth() - birthDate.getMonth();
+  let days = today.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months--;
+    const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += lastMonth.getDate();
   }
-  return age;
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  if (years === 0 && months === 0) {
+    return {
+      value: days,
+      unit: 'days',
+      display: `${days} ${days === 1 ? 'day' : 'days'}`
+    };
+  }
+
+  if (years === 0) {
+    return {
+      value: months,
+      unit: 'months',
+      display: `${months} ${months === 1 ? 'month' : 'months'}`
+    };
+  }
+
+  if (months === 0) {
+    return {
+      value: years,
+      unit: 'years',
+      display: `${years} ${years === 1 ? 'year' : 'years'}`
+    };
+  }
+
+  return {
+    value: years,
+    unit: 'years',
+    display: `${years} ${years === 1 ? 'year' : 'years'} ${months} ${months === 1 ? 'month' : 'months'}`
+  };
 }
 
 export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabResultsEntryProps) {
@@ -676,9 +715,9 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           <div className="flex items-center">
             <span className="text-gray-500 font-medium min-w-[100px]">Age/Gender:</span>
             <span className="font-semibold text-gray-900">
-              {visitTest.visit.patient.age
-                ? `${visitTest.visit.patient.age} ${visitTest.visit.patient.age_unit || 'years'}`
-                : (visitTest.visit.patient.dob ? `${calculateAgeFromDOB(visitTest.visit.patient.dob)} years` : 'N/A')}
+              {visitTest.visit.patient.dob
+                ? calculateAgeFromDOB(visitTest.visit.patient.dob).display
+                : (visitTest.visit.patient.age ? `${visitTest.visit.patient.age} ${visitTest.visit.patient.age_unit || 'years'}` : 'N/A')}
             </span>
             <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-gray-100">
               {visitTest.visit.patient.gender}
