@@ -18,6 +18,7 @@ import {
   ShoppingCart,
   History,
   MessageSquare,
+  Building2,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -46,6 +47,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'lab-results', label: 'Lab Results', icon: FlaskConical },
     { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
+    { id: 'suppliers', label: 'Suppliers', icon: Building2 },
     { id: 'tests', label: 'Tests Management', icon: Settings },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
     { id: 'communication', label: 'Communication', icon: MessageSquare },

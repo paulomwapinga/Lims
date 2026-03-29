@@ -10,6 +10,7 @@ import Visits from './pages/Visits';
 import VisitHistory from './pages/VisitHistory';
 import Inventory from './pages/Inventory';
 import Purchases from './pages/Purchases';
+import Suppliers from './pages/Suppliers';
 import Tests from './pages/Tests';
 import Reports from './pages/Reports';
 import Users from './pages/Users';
@@ -249,6 +250,8 @@ function AppContent() {
         return profile?.role === 'admin' ? <Inventory /> : <Dashboard />;
       case 'purchases':
         return profile?.role === 'admin' ? <Purchases /> : <Dashboard />;
+      case 'suppliers':
+        return profile?.role === 'admin' ? <Suppliers /> : <Dashboard />;
       case 'tests':
         return profile?.role === 'admin' ? <Tests /> : <Dashboard />;
       case 'reports':
