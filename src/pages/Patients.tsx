@@ -456,7 +456,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           .eq('visit_test_id', visitTestId),
         supabase
           .from('settings')
-          .select('key, value, signature_image')
+          .select('key, value, signature_image, clinic_logo_url')
       ];
 
       // Add user query if results_entered_by exists
@@ -489,6 +489,9 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           settingsMap[item.key] = item.value;
           if (item.signature_image) {
             settingsMap.signature_image = item.signature_image;
+          }
+          if (item.clinic_logo_url) {
+            settingsMap.clinic_logo_url = item.clinic_logo_url;
           }
         });
       }
