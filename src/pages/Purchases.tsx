@@ -381,21 +381,6 @@ export default function Purchases() {
 
       if (itemsError) throw itemsError;
 
-      if (!saveAsDraft) {
-        for (const purchaseItem of purchaseItems) {
-          const item = items.find((i) => i.id === purchaseItem.item_id);
-          if (item) {
-            const newQty = item.qty_on_hand + purchaseItem.quantity;
-            const { error: updateError } = await supabase
-              .from('inventory_items')
-              .update({ qty_on_hand: newQty })
-              .eq('id', purchaseItem.item_id);
-
-            if (updateError) throw updateError;
-          }
-        }
-      }
-
       const newPurchaseWithCount = {
         ...purchaseData,
         items_count: purchaseItems.length,
@@ -404,6 +389,7 @@ export default function Purchases() {
 
       alert(saveAsDraft ? 'Purchase saved as draft!' : 'Purchase completed successfully!');
       closeDialog();
+      loadItems();
       loadItems();
     } catch (error) {
       console.error('Error saving purchase:', error);
@@ -456,26 +442,6 @@ export default function Purchases() {
     if (!confirm(`Complete this draft purchase from ${purchase.supplier}?`)) return;
 
     try {
-      const { data: purchaseItemsData, error: fetchError } = await supabase
-        .from('purchase_items')
-        .select('item_id, quantity')
-        .eq('purchase_id', purchase.id);
-
-      if (fetchError) throw fetchError;
-
-      for (const purchaseItem of purchaseItemsData || []) {
-        const item = items.find((i) => i.id === purchaseItem.item_id);
-        if (item) {
-          const newQty = item.qty_on_hand + purchaseItem.quantity;
-          const { error: updateError } = await supabase
-            .from('inventory_items')
-            .update({ qty_on_hand: newQty })
-            .eq('id', purchaseItem.item_id);
-
-          if (updateError) throw updateError;
-        }
-      }
-
       const { error: updateError } = await supabase
         .from('purchases')
         .update({
