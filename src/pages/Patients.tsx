@@ -1246,9 +1246,6 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                 <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                                   Doctor
                                 </th>
-                                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                                  Diagnosis
-                                </th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -1272,9 +1269,6 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600">
                                       {medicine.doctor_name}
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">
-                                      {medicine.diagnosis || '-'}
                                     </td>
                                   </tr>
                                 ))}
