@@ -1100,7 +1100,7 @@ export default function Purchases() {
                           )
                           .map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.name} ({item.unit}) - {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
+                              {item.name} ({item.unit}) - Stock: {item.qty_on_hand} - {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
                             </option>
                           ))
                       ) : (
@@ -1110,7 +1110,7 @@ export default function Purchases() {
                               .filter((item) => item.type === 'medicine')
                               .map((item) => (
                                 <option key={item.id} value={item.id}>
-                                  {item.name} ({item.unit})
+                                  {item.name} ({item.unit}) - Stock: {item.qty_on_hand}
                                 </option>
                               ))}
                           </optgroup>
@@ -1119,13 +1119,21 @@ export default function Purchases() {
                               .filter((item) => item.type === 'lab_consumable')
                               .map((item) => (
                                 <option key={item.id} value={item.id}>
-                                  {item.name} ({item.unit})
+                                  {item.name} ({item.unit}) - Stock: {item.qty_on_hand}
                                 </option>
                               ))}
                           </optgroup>
                         </>
                       )}
                     </select>
+                    {itemForm.item_id && (
+                      <div className="mt-2 text-sm">
+                        <span className="text-gray-600">Current stock: </span>
+                        <span className="font-semibold text-blue-600">
+                          {items.find(i => i.id === itemForm.item_id)?.qty_on_hand || 0} {items.find(i => i.id === itemForm.item_id)?.unit}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mb-4">
