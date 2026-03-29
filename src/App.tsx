@@ -208,7 +208,6 @@ function AppContent() {
           <LabResultsView
             visitTestId={selectedVisitTestId}
             onBack={handleBackToTestResults}
-            onEdit={() => {}}
           />
         );
       }

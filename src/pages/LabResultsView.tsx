@@ -387,7 +387,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
             Back to List
           </button>
           <div className="flex gap-2">
-          {onEdit && (
+          {onEdit && (profile?.role === 'admin' || profile?.role === 'lab_tech') && (
             <button
               onClick={onEdit}
               className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
