@@ -111,19 +111,31 @@ export default function Suppliers() {
   async function fetchPurchaseHistory(supplierId: string) {
     try {
       setLoadingHistory(true);
-      const { data, error } = await supabase
+
+      // Fetch purchases
+      const { data: purchasesData, error: purchasesError } = await supabase
         .from('purchases')
-        .select(`
-          *,
-          users!purchases_created_by_fkey (
-            name
-          )
-        `)
+        .select('*')
         .eq('supplier_id', supplierId)
         .order('purchase_date', { ascending: false });
 
-      if (error) throw error;
-      setPurchaseHistory(data || []);
+      if (purchasesError) throw purchasesError;
+
+      // Fetch user names for created_by
+      const userIds = [...new Set(purchasesData?.map(p => p.created_by).filter(Boolean) || [])];
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, name')
+        .in('id', userIds);
+
+      // Map user names to purchases
+      const usersMap = new Map(usersData?.map(u => [u.id, u.name]) || []);
+      const purchasesWithUsers = purchasesData?.map(purchase => ({
+        ...purchase,
+        users: purchase.created_by ? { name: usersMap.get(purchase.created_by) || 'Unknown' } : null
+      })) || [];
+
+      setPurchaseHistory(purchasesWithUsers);
     } catch (error: any) {
       alert('Error loading purchase history: ' + error.message);
     } finally {
