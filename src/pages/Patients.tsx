@@ -126,6 +126,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     enteredByRole: string | null;
   }>({ visitTest: null, results: [], settings: null, enteredByName: null, enteredByRole: null });
   const [loadingTestResult, setLoadingTestResult] = useState(false);
+  const [loadingTestResultId, setLoadingTestResultId] = useState<string | null>(null);
   const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const itemsPerPage = 20;
 
@@ -403,6 +404,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
   async function handleViewTestResult(visitTestId: string) {
     setSelectedTestResultId(visitTestId);
+    setLoadingTestResultId(visitTestId);
     setShowTestResultModal(true);
     setLoadingTestResult(true);
 
@@ -527,6 +529,7 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
       setShowTestResultModal(false);
     } finally {
       setLoadingTestResult(false);
+      setLoadingTestResultId(null);
     }
   }
 
@@ -1204,9 +1207,14 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                 </p>
                                 <button
                                   onClick={() => handleViewTestResult(test.id)}
-                                  className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 transition-colors font-medium"
+                                  disabled={loadingTestResultId === test.id}
+                                  className={`text-xs px-3 py-1.5 rounded transition-colors font-medium ${
+                                    loadingTestResultId === test.id
+                                      ? 'bg-gray-400 text-white cursor-not-allowed'
+                                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                                  }`}
                                 >
-                                  View Full Result
+                                  {loadingTestResultId === test.id ? 'Loading...' : 'View Full Result'}
                                 </button>
                               </div>
                             </div>
