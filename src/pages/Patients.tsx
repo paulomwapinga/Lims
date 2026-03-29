@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
 import { formatDate, formatTime, formatDateTime } from '../lib/dateFormat';
-import { Search, Plus, User, Eye, CreditCard as Edit2, Trash2, FileText, Pill, X, Printer, MessageSquare } from 'lucide-react';
+import { Search, Plus, User, Eye, CreditCard as Edit2, Trash2, FileText, Pill, X, Printer, MessageSquare, TrendingUp, TrendingDown } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface Patient {
@@ -1511,11 +1511,13 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                                       {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null ? (
                                         result.is_abnormal ? (
                                           result.abnormality_type === 'L' ? (
-                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
+                                            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
+                                              <TrendingDown className="w-3.5 h-3.5" />
                                               LOW (L)
                                             </span>
                                           ) : result.abnormality_type === 'H' ? (
-                                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                            <span className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                              <TrendingUp className="w-3.5 h-3.5" />
                                               HIGH (H)
                                             </span>
                                           ) : (
