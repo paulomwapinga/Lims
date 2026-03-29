@@ -88,6 +88,7 @@ export default function Purchases() {
   const [saveNewSupplier, setSaveNewSupplier] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'complete' | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     purchase_date: getTodayDateString(),
@@ -313,6 +314,7 @@ export default function Purchases() {
 
     setShowConfirmDialog(false);
     setConfirmAction(null);
+    setSaving(true);
 
     try {
       let supplierId = formData.supplier_id;
@@ -394,6 +396,8 @@ export default function Purchases() {
     } catch (error) {
       console.error('Error saving purchase:', error);
       alert('Failed to save purchase');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -1274,26 +1278,26 @@ export default function Purchases() {
                   <button
                     type="button"
                     onClick={() => handleSubmit(true)}
-                    disabled={purchaseItems.length === 0}
+                    disabled={purchaseItems.length === 0 || saving}
                     className={`px-4 py-2 rounded-lg ${
-                      purchaseItems.length === 0
+                      purchaseItems.length === 0 || saving
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-yellow-600 text-white hover:bg-yellow-700'
                     }`}
                   >
-                    Save as Draft
+                    {saving ? 'Saving...' : 'Save as Draft'}
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSubmit(false)}
-                    disabled={purchaseItems.length === 0}
+                    disabled={purchaseItems.length === 0 || saving}
                     className={`px-4 py-2 rounded-lg ${
-                      purchaseItems.length === 0
+                      purchaseItems.length === 0 || saving
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    Complete Purchase ({purchaseItems.length} item{purchaseItems.length !== 1 ? 's' : ''})
+                    {saving ? 'Processing...' : `Complete Purchase (${purchaseItems.length} item${purchaseItems.length !== 1 ? 's' : ''})`}
                   </button>
                 </div>
               </div>
@@ -1334,15 +1338,25 @@ export default function Purchases() {
                   setShowConfirmDialog(false);
                   setConfirmAction(null);
                 }}
-                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                disabled={saving}
+                className={`px-4 py-2 rounded-lg ${
+                  saving
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                }`}
               >
                 Cancel
               </button>
               <button
                 onClick={() => completePurchase(false)}
-                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                disabled={saving}
+                className={`px-4 py-2 rounded-lg ${
+                  saving
+                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                    : 'bg-green-600 text-white hover:bg-green-700'
+                }`}
               >
-                Confirm & Complete
+                {saving ? 'Processing...' : 'Confirm & Complete'}
               </button>
             </div>
           </div>
