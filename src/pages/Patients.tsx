@@ -456,7 +456,13 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           .eq('visit_test_id', visitTestId),
         supabase
           .from('settings')
-          .select('key, value, signature_image, clinic_logo_url')
+          .select('key, value'),
+        supabase
+          .from('settings')
+          .select('signature_image')
+          .not('signature_image', 'is', null)
+          .limit(1)
+          .maybeSingle()
       ];
 
       // Add user query if results_entered_by exists
@@ -472,8 +478,9 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
       const results = await Promise.all(promises);
       const resultsData = results[0];
-      const settingsData = results[1];
-      const userData = results[2];
+      const keyValueData = results[1];
+      const signatureData = results[2];
+      const userData = results[3];
 
       const sortedResults = resultsData.data
         ? (resultsData.data as any).sort(
@@ -482,18 +489,15 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
           )
         : [];
 
-      let settingsMap: any = null;
-      if (settingsData.data) {
-        settingsMap = {};
-        settingsData.data.forEach((item: any) => {
+      let settingsMap: any = {};
+      if (keyValueData.data) {
+        keyValueData.data.forEach((item: any) => {
           settingsMap[item.key] = item.value;
-          if (item.signature_image) {
-            settingsMap.signature_image = item.signature_image;
-          }
-          if (item.clinic_logo_url) {
-            settingsMap.clinic_logo_url = item.clinic_logo_url;
-          }
         });
+      }
+
+      if (signatureData.data?.signature_image) {
+        settingsMap.signature_image = signatureData.data.signature_image;
       }
 
       let enteredByName = null;
@@ -1594,26 +1598,17 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
                               <div className="flex-grow flex items-end">
                                 <div className="w-full">
                                   {testResultData.settings?.signature_image ? (
-                                    <div className="flex flex-col items-center">
+                                    <div className="mb-2">
                                       <img
                                         src={testResultData.settings.signature_image}
                                         alt="Authorized Signature"
-                                        className="max-h-20 w-auto object-contain mb-2"
-                                        onError={(e) => {
-                                          e.currentTarget.style.display = 'none';
-                                          const lineDiv = document.createElement('div');
-                                          lineDiv.className = 'border-b-2 border-gray-900 w-full mb-2 mt-12';
-                                          e.currentTarget.parentElement?.appendChild(lineDiv);
-                                        }}
+                                        className="max-h-16 max-w-full object-contain mx-auto"
                                       />
-                                      <p className="text-xs text-gray-700 text-center font-semibold">MEDICAL LAB SCIENTIST / LAB TECH</p>
                                     </div>
                                   ) : (
-                                    <>
-                                      <div className="border-b-2 border-gray-900 w-full mb-2 mt-12"></div>
-                                      <p className="text-xs text-gray-700 text-center font-semibold">MEDICAL LAB SCIENTIST / LAB TECH</p>
-                                    </>
+                                    <div className="border-b-2 border-gray-900 w-full mb-2 mt-12"></div>
                                   )}
+                                  <p className="text-xs text-gray-700 text-center font-semibold">MEDICAL LAB SCIENTIST / LAB TECH</p>
                                 </div>
                               </div>
                             </div>
