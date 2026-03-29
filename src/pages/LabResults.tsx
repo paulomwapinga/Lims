@@ -606,13 +606,15 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                               <Eye className="w-4 h-4 mr-1" />
                               View
                             </button>
-                            <button
-                              onClick={() => handleEnterResults(vt.id)}
-                              className="text-gray-600 hover:text-gray-900 inline-flex items-center"
-                            >
-                              <Edit className="w-4 h-4 mr-1" />
-                              Edit
-                            </button>
+                            {(profile?.role === 'admin' || profile?.role === 'lab_tech') && (
+                              <button
+                                onClick={() => handleEnterResults(vt.id)}
+                                className="text-gray-600 hover:text-gray-900 inline-flex items-center"
+                              >
+                                <Edit className="w-4 h-4 mr-1" />
+                                Edit
+                              </button>
+                            )}
                             {profile?.role === 'admin' && (
                               <button
                                 onClick={() => handleDeleteResults(vt)}
@@ -625,13 +627,15 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                           </>
                         ) : (
                           <>
-                            <button
-                              onClick={() => handleEnterResults(vt.id)}
-                              className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                            >
-                              <FlaskConical className="w-4 h-4 mr-1" />
-                              Enter Results
-                            </button>
+                            {(profile?.role === 'admin' || profile?.role === 'lab_tech') && (
+                              <button
+                                onClick={() => handleEnterResults(vt.id)}
+                                className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+                              >
+                                <FlaskConical className="w-4 h-4 mr-1" />
+                                Enter Results
+                              </button>
+                            )}
                             {profile?.role === 'admin' && (
                               <button
                                 onClick={() => handleDeleteResults(vt)}
