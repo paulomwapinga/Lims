@@ -115,7 +115,7 @@ export default function Suppliers() {
         .from('purchases')
         .select(`
           *,
-          users!created_by (
+          users:created_by (
             name
           )
         `)
