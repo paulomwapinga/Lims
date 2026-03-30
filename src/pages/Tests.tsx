@@ -397,16 +397,20 @@ export default function Tests() {
   }
 
   async function handleDelete(test: Test) {
-    if (!confirm(`Delete test "${test.name}"? This will also remove its recipe.`)) return;
+    if (!confirm(`Delete test "${test.name}"? This will also remove its recipe and parameters.`)) return;
 
     try {
       const { error } = await supabase.from('tests').delete().eq('id', test.id);
 
       if (error) throw error;
       loadTests();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting test:', error);
-      alert('Failed to delete test');
+      if (error.code === '23503') {
+        alert(`Cannot delete "${test.name}" because it has been ordered in one or more patient visits. Remove those visit tests first.`);
+      } else {
+        alert('Failed to delete test');
+      }
     }
   }
 
