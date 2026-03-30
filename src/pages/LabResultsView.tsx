@@ -675,8 +675,8 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                     {enteredByName || 'N/A'}
                   </p>
                   {enteredByRole && (
-                    <p className="text-xs text-blue-600 mt-1 capitalize font-semibold">
-                      {enteredByRole.replace('_', ' ')}
+                    <p className="text-xs text-blue-600 mt-1 uppercase font-semibold">
+                      {enteredByRole === 'lab_tech' ? 'Lab Technician' : enteredByRole.replace('_', ' ')}
                     </p>
                   )}
                 </div>
@@ -707,7 +707,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                       ) : (
                         <div className="border-b-2 border-gray-900 w-full mb-2 mt-12"></div>
                       )}
-                      <p className="text-xs text-gray-700 text-center font-semibold">MEDICAL LAB SCIENTIST / LAB TECH</p>
+                      <p className="text-xs text-gray-700 text-center font-semibold">LAB TECHNICIAN</p>
                     </div>
                   </div>
                 </div>
