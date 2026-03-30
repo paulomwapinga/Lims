@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate } from '../lib/dateFormat';
-import { Plus, UserCog, Key, Trash2, Edit } from 'lucide-react';
+import { Plus, UserCog, Key, Trash2, CreditCard as Edit } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface User {
@@ -310,7 +310,7 @@ export default function Users() {
                         : 'bg-blue-100 text-blue-800'
                     }`}
                   >
-                    {user.role === 'lab_tech' ? 'MEDICAL LAB SCIENTIST' : user.role.toUpperCase()}
+                    {user.role === 'lab_tech' ? 'LAB TECHNICIAN' : user.role.toUpperCase()}
                   </span>
                 </td>
                 <td className="px-6 py-4 text-gray-600 text-sm">
@@ -406,7 +406,7 @@ export default function Users() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="doctor">Doctor</option>
-                  <option value="lab_tech">Medical Lab Scientist</option>
+                  <option value="lab_tech">Lab Technician</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
@@ -533,7 +533,7 @@ export default function Users() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="doctor">Doctor</option>
-                  <option value="lab_tech">Medical Lab Scientist</option>
+                  <option value="lab_tech">Lab Technician</option>
                   <option value="admin">Admin</option>
                 </select>
               </div>
