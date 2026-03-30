@@ -122,7 +122,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{profile?.name}</p>
-                  <p className="text-xs text-slate-400 capitalize font-medium">
+                  <p className="text-xs text-slate-400 uppercase font-medium">
                     {profile?.role === 'lab_tech' ? 'Lab Technician' : profile?.role}
                   </p>
                 </div>
