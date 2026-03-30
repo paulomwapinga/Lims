@@ -537,26 +537,43 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     const printRoot = document.getElementById('print-root');
     if (!printRoot) return;
 
-    const cloned = printRoot.cloneNode(true) as HTMLElement;
-    cloned.id = 'print-clone';
-    cloned.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:auto;overflow:visible;z-index:9999;background:white;';
-    document.body.appendChild(cloned);
-    document.body.classList.add('printing-patient-result');
+    const printWindow = window.open('', '_blank', 'width=900,height=700');
+    if (!printWindow) return;
 
-    const style = document.createElement('style');
-    style.id = 'print-patient-style';
-    style.textContent = `@media print { body > *:not(#print-clone) { display: none !important; } #print-clone { display: block !important; position: static !important; } }`;
-    document.head.appendChild(style);
+    const styles = Array.from(document.styleSheets)
+      .map((sheet) => {
+        try {
+          return Array.from(sheet.cssRules).map((rule) => rule.cssText).join('\n');
+        } catch {
+          const link = sheet.ownerNode as HTMLLinkElement;
+          return link?.href ? `@import url('${link.href}');` : '';
+        }
+      })
+      .join('\n');
 
-    const afterPrint = () => {
-      cloned.remove();
-      style.remove();
-      document.body.classList.remove('printing-patient-result');
-      window.removeEventListener('afterprint', afterPrint);
+    printWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<style>${styles}</style>
+<style>
+  body { margin: 0; padding: 0; background: white; }
+  #print-root { position: static !important; overflow: visible !important; height: auto !important; max-height: none !important; }
+  .no-print { display: none !important; }
+</style>
+</head>
+<body>
+<div id="print-root">${printRoot.innerHTML}</div>
+</body>
+</html>`);
+    printWindow.document.close();
+
+    printWindow.onload = () => {
+      printWindow.focus();
+      printWindow.print();
+      printWindow.onafterprint = () => printWindow.close();
+      setTimeout(() => printWindow.close(), 2000);
     };
-    window.addEventListener('afterprint', afterPrint);
-
-    setTimeout(() => window.print(), 100);
   }
 
   const handleSendSMS = async (patient: Patient) => {
