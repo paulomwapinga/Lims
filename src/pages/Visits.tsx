@@ -510,7 +510,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{patient.name}</p>
                     <p className="text-xs text-gray-600 mt-0.5">
-                      {patient.phone} {patient.age && `• Age: ${patient.age} ${patient.age_unit || 'years'}`}
+                      {patient.age && `${patient.age} ${patient.age_unit || 'years'} • `}{patient.phone}
                     </p>
                   </div>
                 </button>
@@ -529,7 +529,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{selectedPatient.name}</h2>
                 <p className="text-gray-600 mt-1">
-                  {selectedPatient.phone} {selectedPatient.age && `• Age: ${selectedPatient.age} ${selectedPatient.age_unit || 'years'}`}
+                  {selectedPatient.age && `${selectedPatient.age} ${selectedPatient.age_unit || 'years'} • `}{selectedPatient.phone}
                 </p>
               </div>
               <button
