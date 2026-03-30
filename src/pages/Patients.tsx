@@ -540,13 +540,24 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
     const printWindow = window.open('', '_blank', 'width=900,height=700');
     if (!printWindow) return;
 
-    const styles = Array.from(document.styleSheets)
+    const inlineStyles = Array.from(document.styleSheets)
       .map((sheet) => {
         try {
           return Array.from(sheet.cssRules).map((rule) => rule.cssText).join('\n');
         } catch {
+          return '';
+        }
+      })
+      .join('\n');
+
+    const externalLinkTags = Array.from(document.styleSheets)
+      .map((sheet) => {
+        try {
+          Array.from(sheet.cssRules);
+          return '';
+        } catch {
           const link = sheet.ownerNode as HTMLLinkElement;
-          return link?.href ? `@import url('${link.href}');` : '';
+          return link?.href ? `<link rel="stylesheet" href="${link.href}" />` : '';
         }
       })
       .join('\n');
@@ -555,11 +566,17 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 <html>
 <head>
 <meta charset="utf-8" />
-<style>${styles}</style>
+${externalLinkTags}
+<style>${inlineStyles}</style>
 <style>
   body { margin: 0; padding: 0; background: white; }
   #print-root { position: static !important; overflow: visible !important; height: auto !important; max-height: none !important; }
   .no-print { display: none !important; }
+  #print-root .bg-gradient-to-br { background: #eff6ff !important; }
+  #print-root [style*="background-color: rgb(226, 238, 254)"],
+  #print-root [style*="background-color:rgb(226, 238, 254)"] {
+    background-color: #e2eefe !important;
+  }
 </style>
 </head>
 <body>
@@ -568,12 +585,18 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 </html>`);
     printWindow.document.close();
 
-    printWindow.onload = () => {
+    let printed = false;
+    const triggerPrint = () => {
+      if (printed) return;
+      printed = true;
       printWindow.focus();
       printWindow.print();
       printWindow.onafterprint = () => printWindow.close();
       setTimeout(() => printWindow.close(), 2000);
     };
+
+    printWindow.onload = triggerPrint;
+    setTimeout(triggerPrint, 1500);
   }
 
   const handleSendSMS = async (patient: Patient) => {
