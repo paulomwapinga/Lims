@@ -10,6 +10,25 @@ interface Patient {
   phone: string;
   age: number | null;
   age_unit: string | null;
+  dob: string | null;
+}
+
+function getPatientAge(patient: Patient): string {
+  if (patient.dob) {
+    const dob = new Date(patient.dob);
+    const now = new Date();
+    let years = now.getFullYear() - dob.getFullYear();
+    let months = now.getMonth() - dob.getMonth();
+    if (now.getDate() < dob.getDate()) months--;
+    if (months < 0) { years--; months += 12; }
+    if (years > 0 && months > 0) return `${years} years ${months} months`;
+    if (years > 0) return `${years} years`;
+    if (months > 0) return `${months} months`;
+    const days = Math.floor((now.getTime() - dob.getTime()) / (1000 * 60 * 60 * 24));
+    return `${days} days`;
+  }
+  if (patient.age) return `${patient.age} ${patient.age_unit || 'years'}`;
+  return '';
 }
 
 interface Test {
@@ -117,7 +136,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
   }, [initialPatientId]);
 
   async function loadPatients() {
-    const { data } = await supabase.from('patients').select('id, name, phone, age, age_unit').order('name');
+    const { data } = await supabase.from('patients').select('id, name, phone, age, age_unit, dob').order('name');
     setPatients(data || []);
   }
 
@@ -150,7 +169,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
     } else {
       const { data } = await supabase
         .from('patients')
-        .select('id, name, phone, age')
+        .select('id, name, phone, age, age_unit, dob')
         .eq('id', patientId)
         .maybeSingle();
       if (data) setSelectedPatient(data);
@@ -510,7 +529,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 truncate">{patient.name}</p>
                     <p className="text-xs text-gray-600 mt-0.5">
-                      {patient.age && `${patient.age} ${patient.age_unit || 'years'} • `}{patient.phone}
+                      {patient.phone}{getPatientAge(patient) ? ` • ${getPatientAge(patient)}` : ''}
                     </p>
                   </div>
                 </button>
@@ -529,7 +548,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{selectedPatient.name}</h2>
                 <p className="text-gray-600 mt-1">
-                  {selectedPatient.age && `${selectedPatient.age} ${selectedPatient.age_unit || 'years'} • `}{selectedPatient.phone}
+                  {selectedPatient.phone}{getPatientAge(selectedPatient) ? ` • ${getPatientAge(selectedPatient)}` : ''}
                 </p>
               </div>
               <button
