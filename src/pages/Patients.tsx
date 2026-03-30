@@ -534,7 +534,29 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
   }
 
   function handlePrintTestResult() {
-    window.print();
+    const printRoot = document.getElementById('print-root');
+    if (!printRoot) return;
+
+    const cloned = printRoot.cloneNode(true) as HTMLElement;
+    cloned.id = 'print-clone';
+    cloned.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:auto;overflow:visible;z-index:9999;background:white;';
+    document.body.appendChild(cloned);
+    document.body.classList.add('printing-patient-result');
+
+    const style = document.createElement('style');
+    style.id = 'print-patient-style';
+    style.textContent = `@media print { body > *:not(#print-clone) { display: none !important; } #print-clone { display: block !important; position: static !important; } }`;
+    document.head.appendChild(style);
+
+    const afterPrint = () => {
+      cloned.remove();
+      style.remove();
+      document.body.classList.remove('printing-patient-result');
+      window.removeEventListener('afterprint', afterPrint);
+    };
+    window.addEventListener('afterprint', afterPrint);
+
+    setTimeout(() => window.print(), 100);
   }
 
   const handleSendSMS = async (patient: Patient) => {
