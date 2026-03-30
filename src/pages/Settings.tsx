@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, FileSignature, MessageSquare, Send } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, Ligature as FileSignature, MessageSquare, Send, Pencil } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import InterpretationRulesManager from '../components/InterpretationRulesManager';
@@ -65,6 +65,8 @@ export default function Settings() {
   const [newUnit, setNewUnit] = useState({ name: '', description: '' });
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [addingUnit, setAddingUnit] = useState(false);
+  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
+  const [savingUnit, setSavingUnit] = useState(false);
   const [uploadingSignature, setUploadingSignature] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [testingSms, setTestingSms] = useState(false);
@@ -370,6 +372,39 @@ export default function Settings() {
     } catch (error: any) {
       console.error('Error deleting unit:', error);
       alert(`Failed to delete unit: ${error.message}`);
+    }
+  };
+
+  const handleSaveUnit = async () => {
+    if (!editingUnit || !editingUnit.name.trim()) {
+      alert('Unit name is required');
+      return;
+    }
+
+    if (profile?.role !== 'admin') {
+      alert('Only administrators can edit units');
+      return;
+    }
+
+    setSavingUnit(true);
+    try {
+      const { error } = await supabase
+        .from('units')
+        .update({
+          name: editingUnit.name.trim(),
+          description: editingUnit.description.trim(),
+        })
+        .eq('id', editingUnit.id);
+
+      if (error) throw error;
+
+      setEditingUnit(null);
+      loadUnits();
+    } catch (error: any) {
+      console.error('Error updating unit:', error);
+      alert(`Failed to update unit: ${error.message}`);
+    } finally {
+      setSavingUnit(false);
     }
   };
 
@@ -1036,12 +1071,22 @@ export default function Settings() {
                         )}
                       </div>
                       {isAdmin && (
-                        <button
-                          onClick={() => handleDeleteUnit(unit.id, unit.name)}
-                          className="ml-2 text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center space-x-1 ml-2">
+                          <button
+                            onClick={() => setEditingUnit({ ...unit })}
+                            className="text-blue-600 hover:text-blue-800 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                            title="Edit unit"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUnit(unit.id, unit.name)}
+                            className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors"
+                            title="Delete unit"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   ))}
@@ -1112,6 +1157,55 @@ export default function Settings() {
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm hover:shadow-md transition-all disabled:bg-gray-400"
               >
                 {addingUnit ? 'Adding...' : 'Add Unit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingUnit && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h2 className="text-2xl font-bold mb-4 text-gray-900">Edit Unit</h2>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Unit Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editingUnit.name}
+                  onChange={(e) => setEditingUnit({ ...editingUnit, name: e.target.value })}
+                  placeholder="e.g., kg, mg, l"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={editingUnit.description}
+                  onChange={(e) => setEditingUnit({ ...editingUnit, description: e.target.value })}
+                  placeholder="e.g., Kilogram"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end space-x-4 mt-6">
+              <button
+                onClick={() => setEditingUnit(null)}
+                className="px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveUnit}
+                disabled={savingUnit}
+                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm hover:shadow-md transition-all disabled:bg-gray-400"
+              >
+                {savingUnit ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>
