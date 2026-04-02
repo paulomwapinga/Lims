@@ -99,9 +99,9 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
 
     if (isDoctor && profile?.id) {
       const [pendingRes, inProgressRes, completedRes] = await Promise.all([
-        supabase.from('visit_tests').select('id, visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'pending').eq('visits.doctor_id', profile.id),
-        supabase.from('visit_tests').select('id, visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'in_progress').eq('visits.doctor_id', profile.id),
-        supabase.from('visit_tests').select('id, visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'completed').eq('visits.doctor_id', profile.id),
+        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'pending').eq('visit.doctor_id', profile.id),
+        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'in_progress').eq('visit.doctor_id', profile.id),
+        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'completed').eq('visit.doctor_id', profile.id),
       ]);
       setStatusCounts({
         pending: pendingRes.count || 0,
@@ -161,7 +161,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         .range(from, to);
 
       if (isDoctor && profile?.id) {
-        query = query.eq('visits.doctor_id', profile.id);
+        query = query.eq('visit.doctor_id', profile.id);
       }
 
       if (statusFilter !== 'all') {
