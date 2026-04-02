@@ -44,8 +44,11 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const [visitTests, setVisitTests] = useState<VisitTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({ pending: 0, in_progress: 0, completed: 0 });
   const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const [showComplaintModal, setShowComplaintModal] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState('');
@@ -53,6 +56,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
 
   useEffect(() => {
     loadVisitTests();
+    loadStatusCounts();
 
     const channel = supabase
       .channel('visit_tests_changes')
@@ -65,6 +69,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         },
         () => {
           loadVisitTests();
+          loadStatusCounts();
         }
       )
       .subscribe();
@@ -77,12 +82,37 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
       loadVisitTests();
+      loadStatusCounts();
     }
   }, [refreshTrigger]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  useEffect(() => {
+    loadVisitTests();
+  }, [currentPage, searchTerm, statusFilter]);
+
+  const loadStatusCounts = async () => {
+    const [pendingRes, inProgressRes, completedRes] = await Promise.all([
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'pending'),
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'in_progress'),
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'completed'),
+    ]);
+    setStatusCounts({
+      pending: pendingRes.count || 0,
+      in_progress: inProgressRes.count || 0,
+      completed: completedRes.count || 0,
+    });
+  };
+
   const loadVisitTests = async () => {
     try {
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
         .from('visit_tests')
         .select(`
           id,
@@ -109,12 +139,31 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
           test:tests (
             name
           )
-        `)
+        `, { count: 'exact' })
         .order('created_at', { ascending: false })
-        .limit(10000);
+        .range(from, to);
+
+      if (statusFilter !== 'all') {
+        query = query.eq('results_status', statusFilter);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
-      setVisitTests(data as any || []);
+
+      let filtered = data as any[] || [];
+      if (searchTerm) {
+        const lower = searchTerm.toLowerCase();
+        filtered = filtered.filter((vt: VisitTest) =>
+          vt.visit.patient.name.toLowerCase().includes(lower) ||
+          vt.visit.patient.id.toLowerCase().includes(lower) ||
+          vt.visit.id.toLowerCase().includes(lower) ||
+          vt.test.name.toLowerCase().includes(lower)
+        );
+      }
+
+      setVisitTests(filtered);
+      setTotalItems(count || 0);
     } catch (error) {
       console.error('Error loading visit tests:', error);
       alert('Failed to load tests');
@@ -123,26 +172,14 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
     }
   };
 
-  const filteredTests = visitTests.filter(vt => {
-    const matchesSearch =
-      vt.visit.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.visit.patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.visit.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.test.name.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesStatus = statusFilter === 'all' || vt.results_status === statusFilter;
-
-    return matchesSearch && matchesStatus;
-  });
-
-  const totalItems = filteredTests.length;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedTests = filteredTests.slice(startIndex, endIndex);
+  const paginatedTests = visitTests;
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -207,7 +244,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
 
       if (notifError) throw notifError;
 
-      await loadVisitTests();
+      await Promise.all([loadVisitTests(), loadStatusCounts()]);
       alert('Results sent to doctor successfully');
     } catch (error) {
       console.error('Error sending results to doctor:', error);
@@ -286,7 +323,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
       }
 
       alert('SMS sent successfully!');
-      await loadVisitTests();
+      await Promise.all([loadVisitTests(), loadStatusCounts()]);
     } catch (error: any) {
       console.error('Error sending SMS (full):', error);
       const errorMessage = error.message || 'Unknown error';
@@ -343,16 +380,16 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         alert('Lab results deleted successfully');
       }
 
-      await loadVisitTests();
+      await Promise.all([loadVisitTests(), loadStatusCounts()]);
     } catch (error: any) {
       console.error('Error deleting:', error);
       alert(`Failed to delete: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const pendingCount = visitTests.filter(vt => vt.results_status === 'pending').length;
-  const inProgressCount = visitTests.filter(vt => vt.results_status === 'in_progress').length;
-  const completedCount = visitTests.filter(vt => vt.results_status === 'completed').length;
+  const pendingCount = statusCounts.pending;
+  const inProgressCount = statusCounts.in_progress;
+  const completedCount = statusCounts.completed;
 
   if (loading) {
     return (
@@ -434,8 +471,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                 type="text"
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="Search by patient, visit number, or test name..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2">
