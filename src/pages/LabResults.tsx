@@ -110,7 +110,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             name
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
       setVisitTests(data as any || []);
