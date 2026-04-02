@@ -123,15 +123,15 @@ export default function Dashboard() {
         const [pendingRes, inProgressRes, completedRes] = await Promise.all([
           supabase
             .from('visit_tests')
-            .select('id', { count: 'exact' })
+            .select('*', { count: 'exact', head: true })
             .eq('results_status', 'pending'),
           supabase
             .from('visit_tests')
-            .select('id', { count: 'exact' })
+            .select('*', { count: 'exact', head: true })
             .eq('results_status', 'in_progress'),
           supabase
             .from('visit_tests')
-            .select('id', { count: 'exact' })
+            .select('*', { count: 'exact', head: true })
             .eq('results_status', 'completed')
             .gte('results_entered_at', todayStart),
         ]);
@@ -154,15 +154,18 @@ export default function Dashboard() {
           supabase
             .from('visits')
             .select('patient_id')
-            .gte('created_at', todayStart),
-          supabase.from('patients').select('id', { count: 'exact' }),
+            .gte('created_at', todayStart)
+            .limit(10000),
+          supabase.from('patients').select('*', { count: 'exact', head: true }),
           supabase
             .from('inventory_items')
-            .select('qty_on_hand, reorder_level'),
+            .select('qty_on_hand, reorder_level')
+            .limit(10000),
           supabase
             .from('visits')
             .select('total')
-            .gte('created_at', todayStart),
+            .gte('created_at', todayStart)
+            .limit(10000),
         ]);
 
         if (todayPatientsRes.error) console.error('Today patients error:', todayPatientsRes.error);
