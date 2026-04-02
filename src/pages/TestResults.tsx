@@ -456,7 +456,7 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTests.length === 0 ? (
+              {paginatedTests.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
                     No test results found
