@@ -65,40 +65,41 @@ export default function Suppliers() {
       setLoading(true);
       const { data, error } = await supabase
         .from('suppliers')
-        .select(`
-          *,
-          purchases!supplier_id (
-            id,
-            total_amount,
-            purchase_date,
-            status
-          )
-        `)
-        .order('name');
+        .select('*')
+        .order('name')
+        .limit(500);
 
       if (error) throw error;
 
-      const suppliersWithStats: SupplierWithStats[] = (data || []).map(supplier => {
-        const completedPurchases = supplier.purchases?.filter((p: any) => p.status === 'completed') || [];
-        const totalAmount = completedPurchases.reduce((sum: number, p: any) => sum + Number(p.total_amount || 0), 0);
-        const lastPurchase = completedPurchases.sort((a: any, b: any) =>
-          new Date(b.purchase_date).getTime() - new Date(a.purchase_date).getTime()
-        )[0];
+      const supplierIds = (data || []).map((s: any) => s.id);
+      let statsMap: Record<string, { total_purchases: number; total_amount: number; last_purchase_date: string | null }> = {};
 
-        return {
-          id: supplier.id,
-          name: supplier.name,
-          contact_person: supplier.contact_person,
-          email: supplier.email,
-          phone: supplier.phone,
-          address: supplier.address,
-          created_at: supplier.created_at,
-          updated_at: supplier.updated_at,
-          total_purchases: completedPurchases.length,
-          total_amount: totalAmount,
-          last_purchase_date: lastPurchase?.purchase_date || null,
-        };
-      });
+      if (supplierIds.length > 0) {
+        const { data: statsData } = await supabase
+          .from('purchases')
+          .select('supplier_id, total_amount, purchase_date')
+          .in('supplier_id', supplierIds)
+          .eq('status', 'completed');
+
+        (statsData || []).forEach((p: any) => {
+          if (!statsMap[p.supplier_id]) {
+            statsMap[p.supplier_id] = { total_purchases: 0, total_amount: 0, last_purchase_date: null };
+          }
+          statsMap[p.supplier_id].total_purchases += 1;
+          statsMap[p.supplier_id].total_amount += Number(p.total_amount || 0);
+          const pDate = p.purchase_date;
+          if (!statsMap[p.supplier_id].last_purchase_date || pDate > statsMap[p.supplier_id].last_purchase_date!) {
+            statsMap[p.supplier_id].last_purchase_date = pDate;
+          }
+        });
+      }
+
+      const suppliersWithStats: SupplierWithStats[] = (data || []).map((supplier: any) => ({
+        ...supplier,
+        total_purchases: statsMap[supplier.id]?.total_purchases || 0,
+        total_amount: statsMap[supplier.id]?.total_amount || 0,
+        last_purchase_date: statsMap[supplier.id]?.last_purchase_date || null,
+      }));
 
       setSuppliers(suppliersWithStats);
     } catch (error: any) {

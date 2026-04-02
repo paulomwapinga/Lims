@@ -41,7 +41,9 @@ export default function Inventory() {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'low'>('all');
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
 
   const [formData, setFormData] = useState({
@@ -64,15 +66,45 @@ export default function Inventory() {
     loadRecipeInfo();
   }, []);
 
+  useEffect(() => {
+    loadInventory();
+  }, [currentPage, searchTerm, filter]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
   async function loadInventory() {
     try {
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
         .from('inventory_items')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('name');
 
-      if (error) throw error;
-      setItems(data || []);
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,unit.ilike.%${searchTerm}%`);
+      }
+
+      if (filter === 'low') {
+        const { data: allData, error } = await query;
+        if (error) throw error;
+        const lowStock = (allData || []).filter(item => item.qty_on_hand <= item.reorder_level);
+        const start = (currentPage - 1) * itemsPerPage;
+        setItems(lowStock.slice(start, start + itemsPerPage));
+        setTotalItems(lowStock.length);
+      } else {
+        const { data, error, count } = await query.range(from, to);
+        if (error) throw error;
+        setItems(data || []);
+        setTotalItems(count || 0);
+      }
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -319,24 +351,7 @@ export default function Inventory() {
     }
   }
 
-  const filteredItems = items
-    .filter((item) => {
-      const matchesFilter = filter === 'all' || item.qty_on_hand <= item.reorder_level;
-      const matchesSearch =
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.unit.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesFilter && matchesSearch;
-    });
-
-  const totalItems = filteredItems.length;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedItems = filteredItems.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filter, searchTerm]);
+  const paginatedItems = items;
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -366,23 +381,23 @@ export default function Inventory() {
             type="text"
             className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
             placeholder="Search by name, type, or unit..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
           />
         </div>
         <div className="flex space-x-4">
           <button
-            onClick={() => setFilter('all')}
+            onClick={() => { setFilter('all'); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-lg ${
               filter === 'all'
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-700 border border-gray-300'
             }`}
           >
-            All Items ({items.length})
+            All Items ({totalItems})
           </button>
           <button
-            onClick={() => setFilter('low')}
+            onClick={() => { setFilter('low'); setCurrentPage(1); }}
             className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
               filter === 'low'
                 ? 'bg-red-600 text-white'
@@ -583,7 +598,7 @@ export default function Inventory() {
           </tbody>
         </table>
 
-        {filteredItems.length === 0 && (
+        {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">No items found</div>
         )}
 

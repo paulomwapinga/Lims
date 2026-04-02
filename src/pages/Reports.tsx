@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency } from '../lib/currency';
 import { formatDate, formatDateTime, getDateDaysAgo, getTodayDateString } from '../lib/dateFormat';
+import { getTodayStart } from '../lib/timezone';
 import { TrendingUp, Package, Activity, ShoppingCart, DollarSign, PieChart, Users } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
@@ -108,49 +109,22 @@ export default function Reports() {
 
   async function loadSalesData() {
     try {
-      const { data: visits, error } = await supabase
-        .from('visits')
-        .select('total, created_at, patient_id')
-        .gte('created_at', dateRange.start)
-        .lte('created_at', dateRange.end + 'T23:59:59');
+      const [summaryRes, patientRes, todayVisitsRes] = await Promise.all([
+        supabase.rpc('get_sales_summary', { start_date: dateRange.start, end_date: dateRange.end }),
+        supabase.from('patients').select('*', { count: 'exact', head: true }),
+        supabase.from('visits').select('total').gte('created_at', getTodayStart()),
+      ]);
 
-      if (error) {
-        console.error('Error fetching visits:', error);
-      }
-
-      const totalRevenue = visits?.reduce((sum, v) => sum + Number(v.total), 0) || 0;
-
-      const { count: patientCount } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true });
-
-      const today = getTodayDateString();
-      const todayVisits = visits?.filter(v => v.created_at.startsWith(today)) || [];
-      const todayRevenue = todayVisits.reduce((sum, v) => sum + Number(v.total), 0);
-
-      const { data: tests } = await supabase
-        .from('visit_tests')
-        .select('price, qty, visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      const testRevenue = tests?.reduce((sum, t) => sum + Number(t.price) * t.qty, 0) || 0;
-
-      const { data: medicines } = await supabase
-        .from('visit_medicines')
-        .select('price, qty, visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      const medicineRevenue = medicines?.reduce((sum, m) => sum + Number(m.price) * Number(m.qty), 0) || 0;
+      const summary = summaryRes.data || {};
+      const todayRevenue = (todayVisitsRes.data || []).reduce((sum: number, v: any) => sum + Number(v.total), 0);
 
       setSalesData({
-        totalRevenue,
+        totalRevenue: summary.total_revenue || 0,
         todayRevenue,
-        testRevenue,
-        medicineRevenue,
-        visitCount: visits?.length || 0,
-        patientCount: patientCount || 0,
+        testRevenue: summary.test_revenue || 0,
+        medicineRevenue: summary.medicine_revenue || 0,
+        visitCount: summary.visit_count || 0,
+        patientCount: patientRes.count || 0,
       });
     } catch (error) {
       console.error('Error loading sales data:', error);
@@ -159,30 +133,12 @@ export default function Reports() {
 
   async function loadTopTests() {
     try {
-      const { data } = await supabase
-        .from('visit_tests')
-        .select('test_id, price, qty, tests(name), visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      if (!data) return;
-
-      const grouped = data.reduce((acc: any, item: any) => {
-        const testId = item.test_id;
-        if (!acc[testId]) {
-          acc[testId] = {
-            name: item.tests.name,
-            count: 0,
-            revenue: 0,
-          };
-        }
-        acc[testId].count += item.qty;
-        acc[testId].revenue += Number(item.price) * item.qty;
-        return acc;
-      }, {});
-
-      const sorted = Object.values(grouped).sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 5);
-      setTopTests(sorted as any);
+      const { data } = await supabase.rpc('get_top_tests', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        limit_count: 5,
+      });
+      setTopTests(data || []);
     } catch (error) {
       console.error('Error loading top tests:', error);
     }
@@ -190,30 +146,12 @@ export default function Reports() {
 
   async function loadTopMedicines() {
     try {
-      const { data } = await supabase
-        .from('visit_medicines')
-        .select('item_id, price, qty, inventory_items(name), visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      if (!data) return;
-
-      const grouped = data.reduce((acc: any, item: any) => {
-        const itemId = item.item_id;
-        if (!acc[itemId]) {
-          acc[itemId] = {
-            name: item.inventory_items.name,
-            qty: 0,
-            revenue: 0,
-          };
-        }
-        acc[itemId].qty += Number(item.qty);
-        acc[itemId].revenue += Number(item.price) * Number(item.qty);
-        return acc;
-      }, {});
-
-      const sorted = Object.values(grouped).sort((a: any, b: any) => b.revenue - a.revenue).slice(0, 5);
-      setTopMedicines(sorted as any);
+      const { data } = await supabase.rpc('get_top_medicines', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        limit_count: 5,
+      });
+      setTopMedicines(data || []);
     } catch (error) {
       console.error('Error loading top medicines:', error);
     }
@@ -221,20 +159,8 @@ export default function Reports() {
 
   async function loadLowStock() {
     try {
-      const { data } = await supabase
-        .from('inventory_items')
-        .select('name, qty_on_hand, reorder_level, type');
-
-      const lowStockData = data?.filter(
-        item => item.qty_on_hand <= item.reorder_level
-      ) || [];
-
-      setLowStock(lowStockData.map(item => ({
-        name: item.name,
-        qty: item.qty_on_hand,
-        reorder: item.reorder_level,
-        type: item.type,
-      })));
+      const { data } = await supabase.rpc('get_low_stock_items');
+      setLowStock(data || []);
     } catch (error) {
       console.error('Error loading low stock:', error);
     }
@@ -324,34 +250,12 @@ export default function Reports() {
 
   async function loadTopSuppliers() {
     try {
-      const { data } = await supabase
-        .from('purchases')
-        .select('supplier, total_amount')
-        .gte('purchase_date', dateRange.start)
-        .lte('purchase_date', dateRange.end + 'T23:59:59')
-        .eq('status', 'completed');
-
-      if (!data || data.length === 0) {
-        setTopSuppliers([]);
-        return;
-      }
-
-      const grouped = data.reduce((acc: any, item: any) => {
-        const supplier = item.supplier || 'Unknown';
-        if (!acc[supplier]) {
-          acc[supplier] = {
-            supplier,
-            amount: 0,
-            count: 0,
-          };
-        }
-        acc[supplier].amount += Number(item.total_amount);
-        acc[supplier].count += 1;
-        return acc;
-      }, {});
-
-      const sorted = Object.values(grouped).sort((a: any, b: any) => b.amount - a.amount).slice(0, 5);
-      setTopSuppliers(sorted as any);
+      const { data } = await supabase.rpc('get_top_suppliers', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        limit_count: 5,
+      });
+      setTopSuppliers(data || []);
     } catch (error) {
       console.error('Error loading top suppliers:', error);
     }
@@ -415,77 +319,24 @@ export default function Reports() {
 
   async function loadProfitData() {
     try {
-      const { data: visits } = await supabase
-        .from('visits')
-        .select('paid')
-        .gte('created_at', dateRange.start)
-        .lte('created_at', dateRange.end + 'T23:59:59');
-
-      const totalRevenue = visits?.reduce((sum, v) => sum + Number(v.paid), 0) || 0;
-
-      const { data: tests } = await supabase
-        .from('visit_tests')
-        .select('test_id, price, qty, visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      const testRevenue = tests?.reduce((sum, t) => sum + Number(t.price) * t.qty, 0) || 0;
-
-      const testCostsMap: Record<string, number> = {};
-      if (tests && tests.length > 0) {
-        const uniqueTestIds = [...new Set(tests.map(t => t.test_id))];
-        const { data: consumables } = await supabase
-          .from('test_consumables')
-          .select('test_id, quantity, inventory_items(cost_price)')
-          .in('test_id', uniqueTestIds);
-
-        consumables?.forEach((item: any) => {
-          if (!testCostsMap[item.test_id]) testCostsMap[item.test_id] = 0;
-          const costPrice = (item.inventory_items as any)?.cost_price || 0;
-          testCostsMap[item.test_id] += Number(costPrice) * Number(item.quantity);
-        });
-      }
-
-      const testCOGS = tests?.reduce((sum, t) => {
-        const costPerTest = testCostsMap[t.test_id] || 0;
-        return sum + (costPerTest * t.qty);
-      }, 0) || 0;
-
-      const { data: medicinesData } = await supabase
-        .from('visit_medicines')
-        .select('item_id, price, qty, visits!inner(created_at), inventory_items(cost_price)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      const medicineRevenue = medicinesData?.reduce((sum, m) => sum + Number(m.price) * Number(m.qty), 0) || 0;
-      const medicineCOGS = medicinesData?.reduce((sum, m) => {
-        const costPrice = (m.inventory_items as any)?.cost_price || 0;
-        return sum + Number(costPrice) * Number(m.qty);
-      }, 0) || 0;
-
-      const totalCOGS = testCOGS + medicineCOGS;
-      const grossProfit = totalRevenue - totalCOGS;
-      const profitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
-
-      const medicineProfit = medicineRevenue - medicineCOGS;
-      const medicineProfitMargin = medicineRevenue > 0 ? (medicineProfit / medicineRevenue) * 100 : 0;
-
-      const testProfit = testRevenue - testCOGS;
-      const testProfitMargin = testRevenue > 0 ? (testProfit / testRevenue) * 100 : 0;
-
+      const { data } = await supabase.rpc('get_profit_summary', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+      });
+      if (!data) return;
       setProfitData({
-        totalRevenue,
-        totalExpenses: totalCOGS,
-        grossProfit,
-        profitMargin,
-        testRevenue,
-        medicineRevenue,
-        medicineCOGS,
-        consumableCosts: testCOGS,
-        medicineProfit,
-        testProfit,
-        medicineProfitMargin,
-        testProfitMargin,
+        totalRevenue: data.total_revenue || 0,
+        totalExpenses: (data.test_cogs || 0) + (data.medicine_cogs || 0),
+        grossProfit: data.gross_profit || 0,
+        profitMargin: data.profit_margin || 0,
+        testRevenue: data.test_revenue || 0,
+        medicineRevenue: data.medicine_revenue || 0,
+        medicineCOGS: data.medicine_cogs || 0,
+        consumableCosts: data.test_cogs || 0,
+        medicineProfit: data.medicine_profit || 0,
+        testProfit: data.test_profit || 0,
+        medicineProfitMargin: data.medicine_profit_margin || 0,
+        testProfitMargin: data.test_profit_margin || 0,
       });
     } catch (error) {
       console.error('Error loading profit data:', error);
@@ -494,61 +345,16 @@ export default function Reports() {
 
   async function loadTopProfitableTests() {
     try {
-      const { data } = await supabase
-        .from('visit_tests')
-        .select('test_id, price, qty, tests(name), visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      if (!data || data.length === 0) {
-        setTopProfitableTests([]);
-        return;
-      }
-
-      const uniqueTestIds = [...new Set(data.map(t => t.test_id))];
-      const { data: consumables } = await supabase
-        .from('test_consumables')
-        .select('test_id, inventory_items(cost_price), quantity')
-        .in('test_id', uniqueTestIds);
-
-      const consumableMap = consumables?.reduce((acc: any, item: any) => {
-        if (!acc[item.test_id]) acc[item.test_id] = 0;
-        const costPrice = (item.inventory_items as any)?.cost_price || 0;
-        acc[item.test_id] += Number(costPrice) * Number(item.quantity);
-        return acc;
-      }, {}) || {};
-
-      const grouped = data.reduce((acc: any, item: any) => {
-        const testId = item.test_id;
-        if (!acc[testId]) {
-          acc[testId] = {
-            name: item.tests.name,
-            revenue: 0,
-            cost: 0,
-            count: 0,
-          };
-        }
-        const revenue = Number(item.price) * item.qty;
-        const costPerTest = consumableMap[testId] || 0;
-        const cost = costPerTest * item.qty;
-
-        acc[testId].revenue += revenue;
-        acc[testId].cost += cost;
-        acc[testId].count += item.qty;
-        return acc;
-      }, {});
-
-      const result = Object.values(grouped).map((item: any) => ({
-        name: item.name,
-        revenue: item.revenue,
-        cost: item.cost,
-        profit: item.revenue - item.cost,
-        margin: item.revenue > 0 ? ((item.revenue - item.cost) / item.revenue) * 100 : 0,
-        count: item.count,
+      const { data } = await supabase.rpc('get_top_profitable_tests', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        limit_count: 5,
+      });
+      const result = (data || []).map((item: any) => ({
+        ...item,
+        margin: item.revenue > 0 ? ((item.profit / item.revenue) * 100) : 0,
       }));
-
-      const sorted = result.sort((a: any, b: any) => b.profit - a.profit).slice(0, 5);
-      setTopProfitableTests(sorted);
+      setTopProfitableTests(result);
     } catch (error) {
       console.error('Error loading top profitable tests:', error);
     }
@@ -556,48 +362,16 @@ export default function Reports() {
 
   async function loadTopProfitableMedicines() {
     try {
-      const { data } = await supabase
-        .from('visit_medicines')
-        .select('item_id, price, qty, inventory_items(name, cost_price), visits!inner(created_at)')
-        .gte('visits.created_at', dateRange.start)
-        .lte('visits.created_at', dateRange.end + 'T23:59:59');
-
-      if (!data || data.length === 0) {
-        setTopProfitableMedicines([]);
-        return;
-      }
-
-      const grouped = data.reduce((acc: any, item: any) => {
-        const itemId = item.item_id;
-        if (!acc[itemId]) {
-          acc[itemId] = {
-            name: item.inventory_items.name,
-            revenue: 0,
-            cost: 0,
-            qty: 0,
-          };
-        }
-        const revenue = Number(item.price) * Number(item.qty);
-        const costPrice = (item.inventory_items as any)?.cost_price || 0;
-        const cost = Number(costPrice) * Number(item.qty);
-
-        acc[itemId].revenue += revenue;
-        acc[itemId].cost += cost;
-        acc[itemId].qty += Number(item.qty);
-        return acc;
-      }, {});
-
-      const result = Object.values(grouped).map((item: any) => ({
-        name: item.name,
-        revenue: item.revenue,
-        cost: item.cost,
-        profit: item.revenue - item.cost,
-        margin: item.revenue > 0 ? ((item.revenue - item.cost) / item.revenue) * 100 : 0,
-        qty: item.qty,
+      const { data } = await supabase.rpc('get_top_profitable_medicines', {
+        start_date: dateRange.start,
+        end_date: dateRange.end,
+        limit_count: 5,
+      });
+      const result = (data || []).map((item: any) => ({
+        ...item,
+        margin: item.revenue > 0 ? ((item.profit / item.revenue) * 100) : 0,
       }));
-
-      const sorted = result.sort((a: any, b: any) => b.profit - a.profit).slice(0, 5);
-      setTopProfitableMedicines(sorted);
+      setTopProfitableMedicines(result);
     } catch (error) {
       console.error('Error loading top profitable medicines:', error);
     }

@@ -89,7 +89,7 @@ export default function Tests() {
 
   async function loadTests() {
     try {
-      const { data, error } = await supabase.from('tests').select('*').order('name');
+      const { data, error } = await supabase.from('tests').select('*').order('name').limit(500);
 
       if (error) throw error;
       setTests(data || []);
@@ -106,7 +106,8 @@ export default function Tests() {
         .from('inventory_items')
         .select('*')
         .eq('type', 'lab_consumable')
-        .order('name');
+        .order('name')
+        .limit(500);
 
       if (error) throw error;
       setItems(data || []);

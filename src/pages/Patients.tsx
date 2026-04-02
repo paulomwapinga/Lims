@@ -109,6 +109,8 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
   const [medicines, setMedicines] = useState<MedicineHistory[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [searchInput, setSearchInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState<'visits' | 'tests' | 'medicines'>('visits');
   const [historyPage, setHistoryPage] = useState(1);
@@ -160,17 +162,36 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
   useEffect(() => {
     loadPatients();
-  }, []);
+  }, [currentPage, searchTerm]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   async function loadPatients() {
     try {
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
         .from('patients')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*', { count: 'exact' })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,phone.ilike.%${searchTerm}%`);
+      }
+
+      const { data, error, count } = await query;
 
       if (error) throw error;
       setPatients(data || []);
+      setTotalItems(count || 0);
     } catch (error) {
       console.error('Error loading patients:', error);
     } finally {
@@ -225,18 +246,12 @@ export default function Patients({ onStartVisit, onViewTestResult }: PatientsPro
 
         if (error) throw error;
 
-        if (newPatient) {
-          setPatients([newPatient, ...patients]);
-        }
       }
 
       setFormData({ name: '', phone: '', gender: '', dob: '', age: '', age_unit: 'years', address: '', marital_status: '' });
       setEditingPatient(null);
       setShowForm(false);
-
-      if (editingPatient) {
-        loadPatients();
-      }
+      loadPatients();
     } catch (error) {
       console.error('Error saving patient:', error);
       alert('Failed to save patient');
@@ -700,20 +715,7 @@ ${externalLinkTags}
     return age;
   }
 
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.phone.includes(searchTerm)
-  );
-
-  const totalItems = filteredPatients.length;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedPatients = filteredPatients.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm]);
+  const paginatedPatients = patients;
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -738,8 +740,8 @@ ${externalLinkTags}
           <input
             type="text"
             placeholder="Search by name or phone..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
@@ -837,7 +839,7 @@ ${externalLinkTags}
           </tbody>
         </table>
 
-        {filteredPatients.length === 0 && (
+        {patients.length === 0 && (
           <div className="text-center py-12 text-gray-500">No patients found</div>
         )}
 

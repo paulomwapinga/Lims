@@ -136,12 +136,12 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
   }, [initialPatientId]);
 
   async function loadPatients() {
-    const { data } = await supabase.from('patients').select('id, name, phone, age, age_unit, dob').order('name');
+    const { data } = await supabase.from('patients').select('id, name, phone, age, age_unit, dob').order('name').limit(2000);
     setPatients(data || []);
   }
 
   async function loadTests() {
-    const { data } = await supabase.from('tests').select('*').order('name');
+    const { data } = await supabase.from('tests').select('*').order('name').limit(500);
     setTests(data || []);
   }
 
@@ -150,7 +150,8 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
       .from('inventory_items')
       .select('*')
       .eq('type', 'medicine')
-      .order('name');
+      .order('name')
+      .limit(500);
     setMedicines(data || []);
   }
 
@@ -158,7 +159,8 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
     const { data } = await supabase
       .from('units')
       .select('*')
-      .order('name');
+      .order('name')
+      .limit(200);
     setUnits(data || []);
   }
 

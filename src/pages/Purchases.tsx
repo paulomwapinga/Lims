@@ -120,7 +120,10 @@ export default function Purchases() {
     try {
       let query = supabase
         .from('purchases')
-        .select('id, purchase_date, total_amount, supplier, supplier_id, notes, status, completed_at, created_at')
+        .select(`
+          id, purchase_date, total_amount, supplier, supplier_id, notes, status, completed_at, created_at,
+          purchase_items(id)
+        `)
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
@@ -147,19 +150,18 @@ export default function Purchases() {
 
       if (error) throw error;
 
-      const purchasesWithCounts = await Promise.all(
-        (purchasesData || []).map(async (purchase) => {
-          const { count } = await supabase
-            .from('purchase_items')
-            .select('*', { count: 'exact', head: true })
-            .eq('purchase_id', purchase.id);
-
-          return {
-            ...purchase,
-            items_count: count || 0,
-          };
-        })
-      );
+      const purchasesWithCounts = (purchasesData || []).map((purchase: any) => ({
+        id: purchase.id,
+        purchase_date: purchase.purchase_date,
+        total_amount: purchase.total_amount,
+        supplier: purchase.supplier,
+        supplier_id: purchase.supplier_id,
+        notes: purchase.notes,
+        status: purchase.status,
+        completed_at: purchase.completed_at,
+        created_at: purchase.created_at,
+        items_count: purchase.purchase_items?.length || 0,
+      }));
 
       setPurchases(purchasesWithCounts);
     } catch (error) {
@@ -174,7 +176,8 @@ export default function Purchases() {
       const { data, error } = await supabase
         .from('inventory_items')
         .select('*')
-        .order('name');
+        .order('name')
+        .limit(500);
 
       if (error) throw error;
       setItems(data || []);
