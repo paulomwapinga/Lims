@@ -525,7 +525,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTests.length === 0 ? (
+              {visitTests.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
                     No tests found
