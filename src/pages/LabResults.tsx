@@ -97,29 +97,16 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const loadStatusCounts = async () => {
     const isDoctor = profile?.role === 'doctor';
 
-    if (isDoctor && profile?.id) {
-      const [pendingRes, inProgressRes, completedRes] = await Promise.all([
-        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'pending').eq('visit.doctor_id', profile.id),
-        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'in_progress').eq('visit.doctor_id', profile.id),
-        supabase.from('visit_tests').select('id, visit:visits!inner(doctor_id)', { count: 'exact', head: true }).eq('results_status', 'completed').eq('visit.doctor_id', profile.id),
-      ]);
-      setStatusCounts({
-        pending: pendingRes.count || 0,
-        in_progress: inProgressRes.count || 0,
-        completed: completedRes.count || 0,
-      });
-    } else {
-      const [pendingRes, inProgressRes, completedRes] = await Promise.all([
-        supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'pending'),
-        supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'in_progress'),
-        supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'completed'),
-      ]);
-      setStatusCounts({
-        pending: pendingRes.count || 0,
-        in_progress: inProgressRes.count || 0,
-        completed: completedRes.count || 0,
-      });
-    }
+    const [pendingRes, inProgressRes, completedRes] = await Promise.all([
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'pending'),
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'in_progress'),
+      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'completed'),
+    ]);
+    setStatusCounts({
+      pending: pendingRes.count || 0,
+      in_progress: inProgressRes.count || 0,
+      completed: completedRes.count || 0,
+    });
   };
 
   const loadVisitTests = async () => {
@@ -160,9 +147,6 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      if (isDoctor && profile?.id) {
-        query = query.eq('visit.doctor_id', profile.id);
-      }
 
       if (statusFilter !== 'all') {
         query = query.eq('results_status', statusFilter);
