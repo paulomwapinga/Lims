@@ -127,40 +127,39 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
             id,
             created_at,
             doctor_id,
-            patient:patients (
+            patient:patients!inner (
               id,
               name,
               phone
             )
           ),
-          test:tests (
+          test:tests!inner (
             name
           )
         `, { count: 'exact' })
-        .order('created_at', { ascending: false })
-        .range(from, to);
+        .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
         query = query.eq('results_status', statusFilter);
       }
 
-      const { data, error, count } = await query;
+      const { data, error, count } = searchTerm
+        ? await query
+        : await query.range(from, to);
 
       if (error) throw error;
 
-      let filtered = data as any[] || [];
+      let results = (data as any[]) || [];
       if (searchTerm) {
         const lower = searchTerm.toLowerCase();
-        filtered = filtered.filter((vt: VisitTest) =>
-          vt.visit.patient.name.toLowerCase().includes(lower) ||
-          vt.visit.patient.id.toLowerCase().includes(lower) ||
-          vt.visit.id.toLowerCase().includes(lower) ||
-          vt.test.name.toLowerCase().includes(lower)
+        results = results.filter((vt: VisitTest) =>
+          vt.visit?.patient?.name?.toLowerCase().includes(lower) ||
+          vt.test?.name?.toLowerCase().includes(lower)
         );
       }
 
-      setVisitTests(filtered);
-      setTotalItems(count || 0);
+      setVisitTests(results);
+      setTotalItems(searchTerm ? results.length : (count || 0));
     } catch (error) {
       console.error('Error loading test results:', error);
       alert('Failed to load test results');
