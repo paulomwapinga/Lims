@@ -37,9 +37,8 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
 
-    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       throw new Error("Missing Supabase environment variables");
     }
 
@@ -48,14 +47,10 @@ Deno.serve(async (req: Request) => {
         autoRefreshToken: false,
         persistSession: false,
       },
-      db: {
-        schema: 'public',
-      },
     });
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
-      console.error("No authorization header found");
       return new Response(
         JSON.stringify({ error: "Missing authorization header" }),
         {
@@ -66,36 +61,17 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = authHeader.replace("Bearer ", "");
-    console.log("Token received (first 20 chars):", token.substring(0, 20));
-
     const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
 
-    if (authError) {
-      console.error("Auth verification error:", authError);
+    if (authError || !user) {
       return new Response(
-        JSON.stringify({
-          error: "Invalid or expired token",
-          details: authError.message
-        }),
+        JSON.stringify({ error: "Unauthorized" }),
         {
           status: 401,
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         }
       );
     }
-
-    if (!user) {
-      console.error("No user found for token");
-      return new Response(
-        JSON.stringify({ error: "User not found" }),
-        {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        }
-      );
-    }
-
-    console.log("User authenticated:", user.id, user.email);
 
     const { data: currentUser, error: userError } = await supabaseAdmin
       .from("users")
@@ -214,8 +190,6 @@ Deno.serve(async (req: Request) => {
     } else if (path.endsWith("/update") && req.method === "POST") {
       const { userId, name, email, role }: UpdateUserRequest = await req.json();
 
-      console.log("Update user request:", { userId, name, email, role });
-
       const updates: any = {};
       if (name !== undefined) updates.name = name;
       if (email !== undefined) updates.email = email;
@@ -232,44 +206,30 @@ Deno.serve(async (req: Request) => {
       }
 
       if (email !== undefined) {
-        console.log("Updating email in auth.users...");
         const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
           userId,
           { email }
         );
 
         if (authUpdateError) {
-          console.error("Auth update error:", authUpdateError);
           return new Response(
-            JSON.stringify({ error: `Failed to update email: ${authUpdateError.message}` }),
+            JSON.stringify({ error: authUpdateError.message }),
             {
               status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             }
           );
         }
-        console.log("Email updated successfully in auth.users");
       }
 
-      console.log("Updating user in database:", updates);
-      const { data: updateData, error: updateError } = await supabaseAdmin
+      const { error: updateError } = await supabaseAdmin
         .from("users")
         .update(updates)
-        .eq("id", userId)
-        .select();
+        .eq("id", userId);
 
       if (updateError) {
-        console.error("Database update error:", updateError);
-        console.error("Error code:", updateError.code);
-        console.error("Error details:", updateError.details);
-        console.error("Error hint:", updateError.hint);
         return new Response(
-          JSON.stringify({
-            error: `Failed to update user: ${updateError.message}`,
-            code: updateError.code,
-            details: updateError.details,
-            hint: updateError.hint
-          }),
+          JSON.stringify({ error: updateError.message }),
           {
             status: 400,
             headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -277,9 +237,6 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      console.log("User updated successfully, data:", updateData);
-
-      console.log("User updated successfully");
       return new Response(
         JSON.stringify({
           success: true,

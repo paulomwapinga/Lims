@@ -2,9 +2,9 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { useNotifications } from '../lib/notifications';
-import { formatDate, formatDateTime } from '../lib/dateFormat';
+import { formatDate } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Bell, MessageSquare } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Bell } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -14,7 +14,6 @@ interface VisitTest {
   results_status: 'pending' | 'in_progress' | 'completed';
   results_entered_at: string | null;
   sent_to_doctor_at: string | null;
-  sms_sent_at: string | null;
   doctor_viewed_at: string | null;
   created_at: string;
   visit: {
@@ -23,7 +22,6 @@ interface VisitTest {
     patient: {
       id: string;
       name: string;
-      phone: string | null;
     };
   };
   test: {
@@ -36,22 +34,17 @@ interface TestResultsProps {
 }
 
 export default function TestResults({ onViewResults }: TestResultsProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const { notifications, markAsRead } = useNotifications();
   const [visitTests, setVisitTests] = useState<VisitTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [statusCounts, setStatusCounts] = useState({ pending: 0, in_progress: 0, completed: 0, new: 0 });
-  const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
   const itemsPerPage = 20;
 
   useEffect(() => {
     loadVisitTests();
-    loadStatusCounts();
 
     const channel = supabase
       .channel('visit_tests_changes_doctor')
@@ -64,7 +57,6 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
         },
         () => {
           loadVisitTests();
-          loadStatusCounts();
         }
       )
       .subscribe();
@@ -74,44 +66,11 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
     };
   }, [user]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
-
-  useEffect(() => {
-    loadVisitTests();
-  }, [currentPage, searchTerm, statusFilter]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchTerm(searchInput);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  const loadStatusCounts = async () => {
-    const [pendingRes, inProgressRes, completedRes, newRes] = await Promise.all([
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'pending'),
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'in_progress'),
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'completed'),
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).not('sent_to_doctor_at', 'is', null).is('doctor_viewed_at', null),
-    ]);
-    setStatusCounts({
-      pending: pendingRes.count || 0,
-      in_progress: inProgressRes.count || 0,
-      completed: completedRes.count || 0,
-      new: newRes.count || 0,
-    });
-  };
-
   const loadVisitTests = async () => {
     if (!user) return;
 
     try {
-      const from = (currentPage - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
-
-      let query = supabase
+      const { data, error } = await supabase
         .from('visit_tests')
         .select(`
           id,
@@ -120,46 +79,26 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
           results_status,
           results_entered_at,
           sent_to_doctor_at,
-          sms_sent_at,
           doctor_viewed_at,
           created_at,
           visit:visits!inner (
             id,
             created_at,
             doctor_id,
-            patient:patients!inner (
+            patient:patients (
               id,
-              name,
-              phone
+              name
             )
           ),
-          test:tests!inner (
+          test:tests (
             name
           )
-        `, { count: 'exact' })
+        `)
+        .eq('visit.doctor_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (statusFilter !== 'all') {
-        query = query.eq('results_status', statusFilter);
-      }
-
-      const { data, error, count } = searchTerm
-        ? await query.range(0, 9999)
-        : await query.range(from, to);
-
       if (error) throw error;
-
-      let results = (data as any[]) || [];
-      if (searchTerm) {
-        const lower = searchTerm.toLowerCase();
-        results = results.filter((vt: VisitTest) =>
-          vt.visit?.patient?.name?.toLowerCase().includes(lower) ||
-          vt.test?.name?.toLowerCase().includes(lower)
-        );
-      }
-
-      setVisitTests(results);
-      setTotalItems(searchTerm ? results.length : (count || 0));
+      setVisitTests(data as any || []);
     } catch (error) {
       console.error('Error loading test results:', error);
       alert('Failed to load test results');
@@ -190,90 +129,26 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
     await loadVisitTests();
   };
 
-  const handleSendSMS = async (visitTest: VisitTest) => {
-    if (!profile || profile.role !== 'doctor') {
-      alert('Only doctors can send SMS');
-      return;
-    }
+  const filteredTests = visitTests.filter(vt => {
+    const matchesSearch =
+      vt.visit.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.visit.patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.visit.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.test.name.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (!visitTest.visit.patient.phone) {
-      alert('Patient has no phone number');
-      return;
-    }
+    const matchesStatus = statusFilter === 'all' || vt.results_status === statusFilter;
 
-    try {
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['sms_completion_message']);
+    return matchesSearch && matchesStatus;
+  });
 
-      const settingsMap: Record<string, string> = {};
-      if (settings) {
-        settings.forEach((s: any) => {
-          settingsMap[s.key] = s.value;
-        });
-      }
+  const totalItems = filteredTests.length;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTests = filteredTests.slice(startIndex, endIndex);
 
-      const messageTemplate = settingsMap.sms_completion_message || 'Hello {patient_name}, your test results are ready. Please visit the clinic.';
-      const previewMessage = messageTemplate.replace(/{patient_name}/g, visitTest.visit.patient.name);
-
-      const confirmSend = confirm(
-        `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "${previewMessage}"`
-      );
-      if (!confirmSend) return;
-
-      setSendingSmsFor(visitTest.id);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No active session');
-      }
-
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          visit_test_id: visitTest.id,
-          recipient_type: 'patient',
-        }),
-      });
-
-      let result;
-      try {
-        result = await response.json();
-      } catch (jsonError) {
-        console.error('Failed to parse JSON response:', jsonError);
-        const text = await response.text();
-        console.error('Raw response:', text);
-        throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
-      }
-
-      console.log('SMS Response:', { status: response.status, result });
-
-      if (!response.ok || !result.success) {
-        const errorMsg = result.error || result.message || 'Failed to send SMS';
-        console.error('SMS API Error:', errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      alert('SMS sent successfully!');
-      await loadVisitTests();
-    } catch (error: any) {
-      console.error('Error sending SMS (full):', error);
-      const errorMessage = error.message || 'Unknown error';
-      console.error('Error message:', errorMessage);
-      alert(`Failed to send SMS: ${errorMessage}`);
-    } finally {
-      setSendingSmsFor(null);
-    }
-  };
-
-  const paginatedTests = visitTests;
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -303,10 +178,10 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
     }
   };
 
-  const pendingCount = statusCounts.pending;
-  const inProgressCount = statusCounts.in_progress;
-  const completedCount = statusCounts.completed;
-  const newResultsCount = statusCounts.new;
+  const pendingCount = visitTests.filter(vt => vt.results_status === 'pending').length;
+  const inProgressCount = visitTests.filter(vt => vt.results_status === 'in_progress').length;
+  const completedCount = visitTests.filter(vt => vt.results_status === 'completed').length;
+  const newResultsCount = visitTests.filter(vt => vt.sent_to_doctor_at && !vt.doctor_viewed_at).length;
 
   if (loading) {
     return (
@@ -327,7 +202,23 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+        <div className="bg-white overflow-hidden shadow rounded-lg">
+          <div className="p-5">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <Bell className="h-6 w-6 text-blue-400" />
+              </div>
+              <div className="ml-5 w-0 flex-1">
+                <dl>
+                  <dt className="text-sm font-medium text-gray-500 truncate">New Results</dt>
+                  <dd className="text-lg font-semibold text-gray-900">{newResultsCount}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white overflow-hidden shadow rounded-lg">
           <div className="p-5">
             <div className="flex items-center">
@@ -388,8 +279,8 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                 type="text"
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="Search by patient, visit number, or test name..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -431,17 +322,14 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                   Results Available
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SMS Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {paginatedTests.length === 0 ? (
+              {filteredTests.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
                     No test results found
                   </td>
                 </tr>
@@ -466,7 +354,7 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>
                         <div className="text-sm text-gray-500">
-                          {formatDateTime(vt.visit.created_at)}
+                          {formatDate(vt.visit.created_at)}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -485,31 +373,6 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
                           </div>
                         ) : (
                           <span className="text-xs text-gray-400">Not yet</span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {vt.sms_sent_at ? (
-                          <div>
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              <MessageSquare className="w-3 h-3 mr-1" />
-                              SMS Sent
-                            </span>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {formatDateTime(vt.sms_sent_at)}
-                            </div>
-                          </div>
-                        ) : vt.results_status === 'completed' && vt.sent_to_doctor_at && vt.visit.patient.phone ? (
-                          <button
-                            onClick={() => handleSendSMS(vt)}
-                            disabled={sendingSmsFor === vt.id}
-                            className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                            title="Send SMS to patient"
-                          >
-                            <MessageSquare className="w-3 h-3 mr-1" />
-                            {sendingSmsFor === vt.id ? 'Sending...' : 'Send SMS'}
-                          </button>
-                        ) : (
-                          <span className="text-xs text-gray-400">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">

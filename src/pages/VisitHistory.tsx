@@ -36,142 +36,9 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const [totalPatients, setTotalPatients] = useState(0);
-  const [showComplaintModal, setShowComplaintModal] = useState(false);
-  const [selectedComplaint, setSelectedComplaint] = useState('');
-  const [showDiagnosisModal, setShowDiagnosisModal] = useState(false);
-  const [selectedDiagnosis, setSelectedDiagnosis] = useState('');
-
   useEffect(() => {
-    let mounted = true;
-
-    const loadAllData = async () => {
-      try {
-        const patientsPromise = supabase
-          .from('patients')
-          .select('*', { count: 'exact', head: true });
-
-        const visitsPromise = supabase
-          .from('visits')
-          .select(
-            `
-            id,
-            created_at,
-            total,
-            payment_status,
-            paid,
-            balance,
-            diagnosis,
-            notes,
-            patients(name),
-            users(name)
-          `
-          )
-          .order('created_at', { ascending: false })
-          .range(0, 99999);
-
-        const [patientsResult, visitsResult] = await Promise.all([
-          patientsPromise,
-          visitsPromise
-        ]);
-
-        if (!mounted) return;
-
-        if (patientsResult.error) throw patientsResult.error;
-        if (visitsResult.error) throw visitsResult.error;
-
-        setTotalPatients(patientsResult.count || 0);
-
-        if (!visitsResult.data || visitsResult.data.length === 0) {
-          setVisits([]);
-          setLoading(false);
-          return;
-        }
-
-        const visitIds = visitsResult.data.map(v => v.id);
-        const visitIdSet = new Set(visitIds);
-
-        // Use SQL aggregation to get test counts - bypasses the 1000 row limit
-        const { data: testCounts, error: testsError } = await supabase.rpc('get_visit_test_counts');
-
-        if (testsError) {
-          console.error('[VisitHistory] Error loading visit test counts:', testsError);
-          console.error('[VisitHistory] Error details:', JSON.stringify(testsError, null, 2));
-        }
-
-        console.log('[VisitHistory] Test count records received:', testCounts?.length || 0);
-
-        // Debug specific visit
-        const debugVisitId = '4bc1fa6c-0369-4027-9142-138a6d6ebbc8';
-        const debugTestCount = testCounts?.find((t: any) => t.visit_id === debugVisitId);
-        console.log(`[VisitHistory] Test counts for visit ${debugVisitId}:`, debugTestCount);
-
-        if (!mounted) return;
-
-        // Convert array of counts to object keyed by visit_id
-        const testsByVisit = (testCounts || []).reduce((acc: any, row: any) => {
-          acc[row.visit_id] = {
-            total: Number(row.total) || 0,
-            pending: Number(row.pending) || 0,
-            inProgress: Number(row.in_progress) || 0,
-            completed: Number(row.completed) || 0
-          };
-          return acc;
-        }, {});
-
-        const visitsWithTests = visitsResult.data.map((v: any) => {
-          const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
-
-          return {
-            id: v.id,
-            created_at: v.created_at,
-            patient_name: v.patients?.name || 'Unknown',
-            doctor_name: v.users?.name || 'Unknown',
-            total: v.total,
-            payment_status: v.payment_status,
-            paid: v.paid,
-            balance: v.balance,
-            diagnosis: v.diagnosis,
-            notes: v.notes,
-            tests_count: testStats.total,
-            pending_tests: testStats.pending,
-            in_progress_tests: testStats.inProgress,
-            completed_tests: testStats.completed,
-          };
-        });
-
-        setVisits(visitsWithTests);
-      } catch (error: any) {
-        if (!mounted) {
-          return;
-        }
-        console.error('Error loading visits:', error);
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    loadAllData();
-
-    return () => {
-      mounted = false;
-    };
+    loadVisits();
   }, []);
-
-  async function loadTotalPatients() {
-    try {
-      const { count, error } = await supabase
-        .from('patients')
-        .select('*', { count: 'exact', head: true });
-
-      if (error) throw error;
-      setTotalPatients(count || 0);
-    } catch (error) {
-      console.error('Error loading total patients:', error);
-    }
-  }
 
   async function loadVisits() {
     try {
@@ -195,62 +62,42 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
       if (error) throw error;
 
-      if (!data || data.length === 0) {
-        setVisits([]);
-        return;
-      }
+      const visitsWithTests = await Promise.all(
+        data.map(async (v: any) => {
+          const { data: visitTests } = await supabase
+            .from('visit_tests')
+            .select('results_status')
+            .eq('visit_id', v.id);
 
-      const visitIds = data.map(v => v.id);
-      const visitIdSet = new Set(visitIds);
+          const testsCount = visitTests?.length || 0;
+          const pending = visitTests?.filter(vt => vt.results_status === 'pending').length || 0;
+          const inProgress = visitTests?.filter(vt => vt.results_status === 'in_progress').length || 0;
+          const completed = visitTests?.filter(vt => vt.results_status === 'completed').length || 0;
 
-      // Fetch ALL visit tests - Supabase has a default 1000 row limit
-      const { data: allVisitTestsRaw, error: testsError } = await supabase
-        .from('visit_tests')
-        .select('visit_id, results_status')
-        .limit(100000);
-
-      if (testsError) {
-        console.error('Error loading visit tests:', testsError);
-      }
-
-      // Filter to only include tests for loaded visits
-      const allVisitTests = (allVisitTestsRaw || []).filter(test => visitIdSet.has(test.visit_id));
-
-      const testsByVisit = (allVisitTests || []).reduce((acc: any, test) => {
-        if (!acc[test.visit_id]) {
-          acc[test.visit_id] = { total: 0, pending: 0, inProgress: 0, completed: 0 };
-        }
-        acc[test.visit_id].total++;
-        if (test.results_status === 'pending') acc[test.visit_id].pending++;
-        if (test.results_status === 'in_progress') acc[test.visit_id].inProgress++;
-        if (test.results_status === 'completed') acc[test.visit_id].completed++;
-        return acc;
-      }, {});
-
-      const visitsWithTests = data.map((v: any) => {
-        const testStats = testsByVisit[v.id] || { total: 0, pending: 0, inProgress: 0, completed: 0 };
-
-        return {
-          id: v.id,
-          created_at: v.created_at,
-          patient_name: v.patients?.name || 'Unknown',
-          doctor_name: v.users?.name || 'Unknown',
-          total: v.total,
-          payment_status: v.payment_status,
-          paid: v.paid,
-          balance: v.balance,
-          diagnosis: v.diagnosis,
-          notes: v.notes,
-          tests_count: testStats.total,
-          pending_tests: testStats.pending,
-          in_progress_tests: testStats.inProgress,
-          completed_tests: testStats.completed,
-        };
-      });
+          return {
+            id: v.id,
+            created_at: v.created_at,
+            patient_name: v.patients?.name || 'Unknown',
+            doctor_name: v.users?.name || 'Unknown',
+            total: v.total,
+            payment_status: v.payment_status,
+            paid: v.paid,
+            balance: v.balance,
+            diagnosis: v.diagnosis,
+            notes: v.notes,
+            tests_count: testsCount,
+            pending_tests: pending,
+            in_progress_tests: inProgress,
+            completed_tests: completed,
+          };
+        })
+      );
 
       setVisits(visitsWithTests);
     } catch (error) {
       console.error('Error loading visits:', error);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -311,6 +158,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
 
   const totalRevenue = filteredVisits.reduce((sum, visit) => sum + visit.total, 0);
   const totalCollected = filteredVisits.reduce((sum, visit) => sum + visit.paid, 0);
+  const totalBalance = filteredVisits.reduce((sum, visit) => sum + visit.balance, 0);
 
   return (
     <div className="space-y-6">
@@ -324,14 +172,14 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
       </div>
 
       {profile?.role !== 'doctor' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-md p-6 text-white">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-blue-100 text-sm font-medium">Total Patients</p>
-                <p className="text-3xl font-bold mt-2">{totalPatients}</p>
+                <p className="text-blue-100 text-sm font-medium">Total Visits</p>
+                <p className="text-3xl font-bold mt-2">{filteredVisits.length}</p>
               </div>
-              <User className="w-10 h-10 text-blue-200" />
+              <Calendar className="w-10 h-10 text-blue-200" />
             </div>
           </div>
 
@@ -339,7 +187,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100 text-sm font-medium">Total Revenue</p>
-                <p className="text-lg font-bold mt-2">{formatCurrency(totalRevenue)}</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalRevenue)}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-400 rounded-full flex items-center justify-center text-xl font-bold">
                 ₦
@@ -351,9 +199,19 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-green-100 text-sm font-medium">Collected</p>
-                <p className="text-lg font-bold mt-2">{formatCurrency(totalCollected)}</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalCollected)}</p>
               </div>
               <CheckCircle className="w-10 h-10 text-green-200" />
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-red-500 to-red-600 rounded-xl shadow-md p-6 text-white">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-red-100 text-sm font-medium">Outstanding</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalBalance)}</p>
+              </div>
+              <AlertCircle className="w-10 h-10 text-red-200" />
             </div>
           </div>
         </div>
@@ -411,9 +269,6 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                   </th>
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
                     Diagnosis
-                  </th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
-                    Complaints
                   </th>
                   {profile?.role !== 'doctor' && (
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
@@ -474,39 +329,11 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                       <div className="text-sm font-medium text-gray-900">{visit.doctor_name}</div>
                     </td>
                     <td className="px-6 py-4">
-                      {visit.diagnosis ? (
-                        <button
-                          onClick={() => {
-                            setSelectedDiagnosis(visit.diagnosis);
-                            setShowDiagnosisModal(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2"
-                          title="View diagnosis"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span className="text-sm font-medium">View</span>
-                        </button>
-                      ) : (
-                        <span className="text-sm text-gray-400">N/A</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
-                        {visit.notes ? (
-                          <button
-                            onClick={() => {
-                              setSelectedComplaint(visit.notes);
-                              setShowComplaintModal(true);
-                            }}
-                            className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2"
-                            title="View complaint"
-                          >
-                            <Eye className="w-4 h-4" />
-                            <span className="text-sm font-medium">View</span>
-                          </button>
-                        ) : (
-                          <span className="text-sm text-gray-400">N/A</span>
-                        )}
+                      <div className="flex items-center max-w-xs">
+                        <FileText className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">
+                          {visit.diagnosis || 'N/A'}
+                        </span>
                       </div>
                     </td>
                     {profile?.role !== 'doctor' && (
@@ -539,7 +366,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                       </td>
                     )}
                     <td className="px-6 py-4">
-                      {(visit.tests_count ?? 0) > 0 ? (
+                      {visit.tests_count ? (
                         <div className="flex flex-wrap gap-1.5">
                           {visit.pending_tests! > 0 && (
                             <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium">
@@ -590,56 +417,6 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
           onPageChange={setCurrentPage}
         />
       </div>
-
-      {showComplaintModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Patient Complaint</h3>
-              <button
-                onClick={() => setShowComplaintModal(false)}
-                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                  {selectedComplaint}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showDiagnosisModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-green-600 to-green-700 px-6 py-4 flex justify-between items-center">
-              <h3 className="text-xl font-bold text-white">Diagnosis</h3>
-              <button
-                onClick={() => setShowDiagnosisModal(false)}
-                className="text-white hover:bg-white/20 rounded-lg p-2 transition-colors"
-              >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(80vh-80px)]">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                  {selectedDiagnosis}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

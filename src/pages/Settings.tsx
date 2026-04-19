@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package, Ligature as FileSignature, MessageSquare, Send, Pencil } from 'lucide-react';
+import { Settings as SettingsIcon, Save, Building2, Upload, Plus, Trash2, Package } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
-import InterpretationRulesManager from '../components/InterpretationRulesManager';
 
 interface ClinicSettings {
   clinic_name: string;
@@ -12,20 +11,6 @@ interface ClinicSettings {
   clinic_logo_url: string;
   clinic_website: string;
   currency: string;
-  signature_image: string;
-}
-
-interface SmsSettings {
-  sms_enabled: boolean;
-  sms_api_key: string;
-  sms_secret_key: string;
-  sms_source_addr: string;
-  sms_template: string;
-  welcome_sms_enabled: boolean;
-  welcome_sms_template: string;
-  service_role_key: string;
-  lab_tech_auto_send_sms: boolean;
-  doctor_auto_send_sms: boolean;
 }
 
 interface Unit {
@@ -44,61 +29,32 @@ export default function Settings() {
     clinic_logo_url: '',
     clinic_website: '',
     currency: 'TSh',
-    signature_image: '',
-  });
-  const [smsSettings, setSmsSettings] = useState<SmsSettings>({
-    sms_enabled: false,
-    sms_api_key: '',
-    sms_secret_key: '',
-    sms_source_addr: '',
-    sms_template: 'Habari [PATIENT_NAME], majibu ya kipimo yako tayari. Tafadhali fika maabara.',
-    welcome_sms_enabled: false,
-    welcome_sms_template: 'Karibu [PATIENT_NAME]! Tunakushukuru kwa kuchagua [CLINIC_NAME]. Tunaomba afya njema.',
-    service_role_key: '',
-    lab_tech_auto_send_sms: false,
-    doctor_auto_send_sms: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [savingSms, setSavingSms] = useState(false);
   const [units, setUnits] = useState<Unit[]>([]);
   const [newUnit, setNewUnit] = useState({ name: '', description: '' });
   const [showAddUnit, setShowAddUnit] = useState(false);
   const [addingUnit, setAddingUnit] = useState(false);
-  const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
-  const [savingUnit, setSavingUnit] = useState(false);
-  const [uploadingSignature, setUploadingSignature] = useState(false);
-  const [uploadingLogo, setUploadingLogo] = useState(false);
-  const [testingSms, setTestingSms] = useState(false);
-  const [testPhone, setTestPhone] = useState('');
 
   useEffect(() => {
-    const loadAllSettings = async () => {
-      try {
-        const [settingsResult, unitsResult] = await Promise.all([
-          supabase.from('settings').select('*'),
-          supabase.from('units').select('*').order('name')
-        ]);
+    loadSettings();
+    loadUnits();
+  }, []);
 
-        if (settingsResult.error) throw settingsResult.error;
-        if (unitsResult.error) throw unitsResult.error;
+  const loadSettings = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('key, value');
 
-        const settingsData = settingsResult.data;
-        const unitsData = unitsResult.data;
+      if (error) throw error;
 
+      if (data) {
         const settingsMap: any = {};
-        let signatureImage = '';
-
-        if (settingsData && Array.isArray(settingsData)) {
-          settingsData.forEach((item) => {
-            if (item.key) {
-              settingsMap[item.key] = item.value;
-            }
-            if (item.signature_image) {
-              signatureImage = item.signature_image;
-            }
-          });
-        }
+        data.forEach((item) => {
+          settingsMap[item.key] = item.value;
+        });
 
         setSettings({
           clinic_name: settingsMap.clinic_name || 'Remtullah Medical Laboratory',
@@ -108,113 +64,13 @@ export default function Settings() {
           clinic_logo_url: settingsMap.clinic_logo_url || '/20260201_200954.jpg',
           clinic_website: settingsMap.clinic_website || '',
           currency: settingsMap.currency || 'TSh',
-          signature_image: signatureImage,
         });
-
-        setSmsSettings({
-          sms_enabled: settingsMap.sms_enabled === 'true',
-          sms_api_key: settingsMap.sms_api_key || '',
-          sms_secret_key: settingsMap.sms_secret_key || '',
-          sms_source_addr: settingsMap.sms_source_addr || '',
-          sms_template: settingsMap.sms_completion_message || 'Hello {patient_name}, your {test_name} results are ready. Please visit the clinic.',
-          welcome_sms_enabled: settingsMap.welcome_sms_enabled === 'true',
-          welcome_sms_template: settingsMap.welcome_sms_message || 'Welcome {patient_name}! Thank you for choosing {clinic_name}. We wish you good health.',
-          service_role_key: '',
-          lab_tech_auto_send_sms: settingsMap.lab_tech_auto_send_sms === 'true',
-          doctor_auto_send_sms: settingsMap.doctor_auto_send_sms === 'true',
-        });
-
-        setUnits(unitsData || []);
-        setLoading(false);
-      } catch (error: any) {
-        console.error('Error loading settings:', error);
-        setLoading(false);
-        alert(`Failed to load settings: ${error.message}`);
-      }
-    };
-
-    loadAllSettings();
-  }, []);
-
-  const handleSaveSms = async () => {
-    if (profile?.role !== 'admin') {
-      alert('Only administrators can update SMS settings');
-      return;
-    }
-
-    setSavingSms(true);
-    try {
-      const settingsToUpdate = [
-        { key: 'sms_enabled', value: smsSettings.sms_enabled ? 'true' : 'false' },
-        { key: 'sms_api_key', value: smsSettings.sms_api_key },
-        { key: 'sms_secret_key', value: smsSettings.sms_secret_key },
-        { key: 'sms_source_addr', value: smsSettings.sms_source_addr },
-        { key: 'sms_completion_message', value: smsSettings.sms_template },
-        { key: 'welcome_sms_enabled', value: smsSettings.welcome_sms_enabled ? 'true' : 'false' },
-        { key: 'welcome_sms_message', value: smsSettings.welcome_sms_template },
-        { key: 'lab_tech_auto_send_sms', value: smsSettings.lab_tech_auto_send_sms ? 'true' : 'false' },
-        { key: 'doctor_auto_send_sms', value: smsSettings.doctor_auto_send_sms ? 'true' : 'false' },
-      ];
-
-      for (const setting of settingsToUpdate) {
-        const { error } = await supabase
-          .from('settings')
-          .upsert({ key: setting.key, value: setting.value }, { onConflict: 'key' });
-
-        if (error) throw error;
-      }
-
-      alert('SMS settings saved successfully');
-    } catch (error: any) {
-      console.error('Error saving SMS settings:', error);
-      alert(`Failed to save SMS settings: ${error.message}`);
-    } finally {
-      setSavingSms(false);
-    }
-  };
-
-  const handleTestSms = async () => {
-    if (!testPhone.trim()) {
-      alert('Please enter a phone number to test');
-      return;
-    }
-
-    if (!smsSettings.sms_api_key || !smsSettings.sms_secret_key || !smsSettings.sms_source_addr) {
-      alert('Please configure SMS credentials first');
-      return;
-    }
-
-    setTestingSms(true);
-    try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          phone: testPhone,
-          message: 'This is a test SMS from your medical laboratory system.',
-          api_key: smsSettings.sms_api_key,
-          secret_key: smsSettings.sms_secret_key,
-          source_addr: smsSettings.sms_source_addr,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-        alert('Test SMS sent successfully!');
-        setTestPhone('');
-      } else {
-        alert(`Failed to send test SMS: ${result.error}\n${result.details ? JSON.stringify(result.details, null, 2) : ''}`);
       }
     } catch (error: any) {
-      console.error('Error sending test SMS:', error);
-      alert(`Failed to send test SMS: ${error.message}`);
+      console.error('Error loading settings:', error);
+      alert(`Failed to load settings: ${error.message}`);
     } finally {
-      setTestingSms(false);
+      setLoading(false);
     }
   };
 
@@ -226,9 +82,7 @@ export default function Settings() {
 
     setSaving(true);
     try {
-      const { signature_image, ...keyValueSettings } = settings;
-
-      const settingsArray = Object.entries(keyValueSettings).map(([key, value]) => ({
+      const settingsArray = Object.entries(settings).map(([key, value]) => ({
         key,
         value: value || '',
       }));
@@ -240,50 +94,6 @@ export default function Settings() {
             { key: setting.key, value: setting.value },
             { onConflict: 'key' }
           );
-
-        if (error) throw error;
-      }
-
-      const { data: existingRow } = await supabase
-        .from('settings')
-        .select('id, signature_image')
-        .not('signature_image', 'is', null)
-        .limit(1)
-        .maybeSingle();
-
-      if (existingRow) {
-        const { error } = await supabase
-          .from('settings')
-          .update({ signature_image: signature_image || null })
-          .eq('id', existingRow.id);
-
-        if (error) throw error;
-      } else if (signature_image) {
-        const { data: anyRow } = await supabase
-          .from('settings')
-          .select('id')
-          .limit(1)
-          .maybeSingle();
-
-        if (anyRow) {
-          const { error } = await supabase
-            .from('settings')
-            .update({ signature_image: signature_image })
-            .eq('id', anyRow.id);
-
-          if (error) throw error;
-        } else {
-          const { error } = await supabase
-            .from('settings')
-            .insert({ key: 'signature_placeholder', value: '', signature_image: signature_image });
-
-          if (error) throw error;
-        }
-      } else if (!signature_image && existingRow) {
-        const { error } = await supabase
-          .from('settings')
-          .update({ signature_image: null })
-          .eq('id', existingRow.id);
 
         if (error) throw error;
       }
@@ -373,121 +183,6 @@ export default function Settings() {
       console.error('Error deleting unit:', error);
       alert(`Failed to delete unit: ${error.message}`);
     }
-  };
-
-  const handleSaveUnit = async () => {
-    if (!editingUnit || !editingUnit.name.trim()) {
-      alert('Unit name is required');
-      return;
-    }
-
-    if (profile?.role !== 'admin') {
-      alert('Only administrators can edit units');
-      return;
-    }
-
-    setSavingUnit(true);
-    try {
-      const { error } = await supabase
-        .from('units')
-        .update({
-          name: editingUnit.name.trim(),
-          description: editingUnit.description.trim(),
-        })
-        .eq('id', editingUnit.id);
-
-      if (error) throw error;
-
-      setEditingUnit(null);
-      loadUnits();
-    } catch (error: any) {
-      console.error('Error updating unit:', error);
-      alert(`Failed to update unit: ${error.message}`);
-    } finally {
-      setSavingUnit(false);
-    }
-  };
-
-  const handleSignatureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Image size should be less than 2MB');
-      return;
-    }
-
-    setUploadingSignature(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64String = event.target?.result as string;
-        setSettings((prev) => ({ ...prev, signature_image: base64String }));
-        setUploadingSignature(false);
-      };
-      reader.onerror = () => {
-        alert('Failed to read file');
-        setUploadingSignature(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (error: any) {
-      console.error('Error uploading signature:', error);
-      alert(`Failed to upload signature: ${error.message}`);
-      setUploadingSignature(false);
-    }
-  };
-
-  const handleRemoveSignature = () => {
-    if (!confirm('Are you sure you want to remove the signature?')) {
-      return;
-    }
-    setSettings((prev) => ({ ...prev, signature_image: '' }));
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      alert('Please upload an image file');
-      return;
-    }
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Image size should be less than 2MB');
-      return;
-    }
-
-    setUploadingLogo(true);
-    try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64String = event.target?.result as string;
-        setSettings((prev) => ({ ...prev, clinic_logo_url: base64String }));
-        setUploadingLogo(false);
-      };
-      reader.onerror = () => {
-        alert('Failed to read file');
-        setUploadingLogo(false);
-      };
-      reader.readAsDataURL(file);
-    } catch (error: any) {
-      console.error('Error uploading logo:', error);
-      alert(`Failed to upload logo: ${error.message}`);
-      setUploadingLogo(false);
-    }
-  };
-
-  const handleRemoveLogo = () => {
-    if (!confirm('Are you sure you want to remove the logo?')) {
-      return;
-    }
-    setSettings((prev) => ({ ...prev, clinic_logo_url: '' }));
   };
 
   if (loading) {
@@ -608,95 +303,44 @@ export default function Settings() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Clinic Logo
+                  Logo URL
                 </label>
-                <p className="text-sm text-gray-500 mb-3">
-                  Upload a logo image or enter a URL to be displayed on receipts and reports
-                </p>
-                <div className="space-y-4">
-                  {settings.clinic_logo_url ? (
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-700 mb-2">Current Logo</p>
-                          <div className="bg-white border border-gray-300 rounded-lg p-4 inline-block">
-                            <img
-                              src={settings.clinic_logo_url}
-                              alt="Clinic Logo"
-                              className="max-h-24 max-w-xs object-contain"
-                              onError={(e) => {
-                                e.currentTarget.src = '/20260201_200954.jpg';
-                              }}
-                            />
-                          </div>
-                        </div>
-                        {isAdmin && (
-                          <button
-                            onClick={handleRemoveLogo}
-                            className="ml-4 text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                      <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-500">No logo uploaded</p>
-                    </div>
-                  )}
-
-                  {isAdmin && (
-                    <div className="space-y-3">
-                      <label className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">
-                        <Upload className="w-4 h-4 mr-2" />
-                        {uploadingLogo ? 'Uploading...' : settings.clinic_logo_url ? 'Change Logo' : 'Upload Logo'}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleLogoUpload}
-                          disabled={uploadingLogo}
-                          className="hidden"
-                        />
-                      </label>
-                      <p className="text-xs text-gray-500">
-                        Supported formats: PNG, JPG, GIF. Maximum size: 2MB
-                      </p>
-                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                        <p className="text-sm text-blue-800">
-                          After uploading, click the "Save Changes" button at the top to save your logo.
-                        </p>
-                      </div>
-                      <details className="mt-3">
-                        <summary className="text-sm font-medium text-gray-700 cursor-pointer hover:text-gray-900">
-                          Or enter a logo URL manually
-                        </summary>
-                        <div className="mt-3">
-                          <input
-                            type="text"
-                            value={settings.clinic_logo_url}
-                            onChange={(e) => handleChange('clinic_logo_url', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="e.g., /logo.png or https://example.com/logo.png"
-                          />
-                          <p className="text-xs text-gray-500 mt-1">
-                            Enter the path or URL to your logo image
-                          </p>
-                        </div>
-                      </details>
-                    </div>
-                  )}
-
-                  {!isAdmin && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <p className="text-sm text-yellow-800">
-                        Only administrators can upload or change the logo.
-                      </p>
+                <div className="flex items-start space-x-3">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={settings.clinic_logo_url}
+                      onChange={(e) => handleChange('clinic_logo_url', e.target.value)}
+                      disabled={!isAdmin}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
+                      placeholder="e.g., /logo.png"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter the path to your logo image (e.g., /logo.png)
+                    </p>
+                  </div>
+                  {settings.clinic_logo_url && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={settings.clinic_logo_url}
+                        alt="Clinic Logo Preview"
+                        className="h-16 w-auto object-contain border border-gray-200 rounded-md p-2"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
                     </div>
                   )}
                 </div>
               </div>
+
+              {!isAdmin && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    Only administrators can modify clinic information settings.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -712,325 +356,6 @@ export default function Settings() {
                 </div>
                 <div className="text-2xl font-bold text-gray-900">{settings.currency}</div>
               </div>
-            </div>
-          </div>
-
-          <div className="border-t border-gray-200 pt-6">
-            <div className="flex items-center space-x-2 mb-4">
-              <FileSignature className="w-5 h-5 text-gray-700" />
-              <h2 className="text-lg font-semibold text-gray-900">Signature</h2>
-            </div>
-            <p className="text-sm text-gray-500 mb-4">
-              Upload a signature image to be displayed on lab reports and receipts
-            </p>
-            <div className="space-y-4">
-              {settings.signature_image ? (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-700 mb-2">Current Signature</p>
-                      <div className="bg-white border border-gray-300 rounded-lg p-4 inline-block">
-                        <img
-                          src={settings.signature_image}
-                          alt="Signature"
-                          className="max-h-24 max-w-xs object-contain"
-                        />
-                      </div>
-                    </div>
-                    {isAdmin && (
-                      <button
-                        onClick={handleRemoveSignature}
-                        className="ml-4 text-red-600 hover:text-red-800 p-2 rounded hover:bg-red-50 transition-colors"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                  <FileSignature className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                  <p className="text-sm text-gray-500">No signature uploaded</p>
-                </div>
-              )}
-
-              {isAdmin && (
-                <div className="space-y-3">
-                  <label className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 cursor-pointer">
-                    <Upload className="w-4 h-4 mr-2" />
-                    {uploadingSignature ? 'Uploading...' : settings.signature_image ? 'Change Signature' : 'Upload Signature'}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleSignatureUpload}
-                      disabled={uploadingSignature}
-                      className="hidden"
-                    />
-                  </label>
-                  <p className="text-xs text-gray-500">
-                    Supported formats: PNG, JPG, GIF. Maximum size: 2MB
-                  </p>
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <p className="text-sm text-blue-800">
-                      After uploading, click the "Save Changes" button at the top to save your signature.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {!isAdmin && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    Only administrators can upload or change the signature.
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="border-t border-gray-200 pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5 text-gray-700" />
-                <h2 className="text-lg font-semibold text-gray-900">SMS Notifications</h2>
-              </div>
-              {isAdmin && (
-                <button
-                  onClick={handleSaveSms}
-                  disabled={savingSms}
-                  className="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400"
-                >
-                  <Save className="w-4 h-4 mr-2" />
-                  {savingSms ? 'Saving...' : 'Save SMS Settings'}
-                </button>
-              )}
-            </div>
-            <p className="text-sm text-gray-500 mb-4">
-              Configure SMS notifications to alert patients when their lab results are ready (via Beem Africa)
-            </p>
-
-            <div className="space-y-4">
-              <div className="flex items-center">
-                <input
-                  type="checkbox"
-                  id="sms_enabled"
-                  checked={smsSettings.sms_enabled}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_enabled: e.target.checked })}
-                  disabled={!isAdmin}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
-                />
-                <label htmlFor="sms_enabled" className="ml-2 block text-sm font-medium text-gray-700">
-                  Enable SMS Notifications
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  API Key
-                </label>
-                <input
-                  type="text"
-                  value={smsSettings.sms_api_key}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_api_key: e.target.value })}
-                  disabled={!isAdmin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
-                  placeholder="Enter Beem Africa API Key"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Secret Key
-                </label>
-                <input
-                  type="password"
-                  value={smsSettings.sms_secret_key}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_secret_key: e.target.value })}
-                  disabled={!isAdmin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
-                  placeholder="Enter Beem Africa Secret Key"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Source Address (Sender ID)
-                </label>
-                <input
-                  type="text"
-                  value={smsSettings.sms_source_addr}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_source_addr: e.target.value })}
-                  disabled={!isAdmin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                  placeholder="e.g., CLINIC"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  The sender name that will appear to recipients
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Supabase Service Role Key
-                </label>
-                <input
-                  type="password"
-                  value={smsSettings.service_role_key}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, service_role_key: e.target.value })}
-                  disabled={!isAdmin}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 font-mono text-sm"
-                  placeholder="Enter Supabase Service Role Key"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Required for automatic SMS triggers. Find this in your Supabase project settings under API.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Test Results SMS Template
-                </label>
-                <textarea
-                  value={smsSettings.sms_template}
-                  onChange={(e) => setSmsSettings({ ...smsSettings, sms_template: e.target.value })}
-                  disabled={!isAdmin}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                  placeholder="Enter SMS message template"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Available placeholders: [PATIENT_NAME], [TEST_NAME]
-                </p>
-              </div>
-
-              <div className="border-t border-gray-200 pt-4 mt-4">
-                <h3 className="text-md font-semibold text-gray-900 mb-3">Automatic SMS Options</h3>
-
-                <div className="space-y-3">
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="lab_tech_auto_send_sms"
-                      checked={smsSettings.lab_tech_auto_send_sms}
-                      onChange={(e) => setSmsSettings({ ...smsSettings, lab_tech_auto_send_sms: e.target.checked })}
-                      disabled={!isAdmin}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
-                    />
-                    <label htmlFor="lab_tech_auto_send_sms" className="ml-2 block text-sm text-gray-700">
-                      Auto-send SMS to patient when lab tech completes test results
-                    </label>
-                  </div>
-
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="doctor_auto_send_sms"
-                      checked={smsSettings.doctor_auto_send_sms}
-                      onChange={(e) => setSmsSettings({ ...smsSettings, doctor_auto_send_sms: e.target.checked })}
-                      disabled={!isAdmin}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
-                    />
-                    <label htmlFor="doctor_auto_send_sms" className="ml-2 block text-sm text-gray-700">
-                      Auto-send SMS to doctor when results are sent to them
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-blue-900 mb-2">Test Results SMS - How it works:</p>
-                <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                  <li>Lab technician enters test results and marks as completed</li>
-                  <li>If enabled, system automatically sends SMS to patient's phone number</li>
-                  <li>Patient receives notification that results are ready</li>
-                </ol>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6 mt-6">
-                <h3 className="text-md font-semibold text-gray-900 mb-4">Welcome SMS</h3>
-
-                <div className="flex items-center mb-4">
-                  <input
-                    type="checkbox"
-                    id="welcome_sms_enabled"
-                    checked={smsSettings.welcome_sms_enabled}
-                    onChange={(e) => setSmsSettings({ ...smsSettings, welcome_sms_enabled: e.target.checked })}
-                    disabled={!isAdmin}
-                    className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded disabled:bg-gray-100"
-                  />
-                  <label htmlFor="welcome_sms_enabled" className="ml-2 block text-sm font-medium text-gray-700">
-                    Send Welcome SMS to New Patients
-                  </label>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Welcome SMS Template
-                  </label>
-                  <textarea
-                    value={smsSettings.welcome_sms_template}
-                    onChange={(e) => setSmsSettings({ ...smsSettings, welcome_sms_template: e.target.value })}
-                    disabled={!isAdmin}
-                    rows={3}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500"
-                    placeholder="Enter welcome SMS message template"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Available placeholders: [PATIENT_NAME], [CLINIC_NAME]
-                  </p>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mt-4">
-                  <p className="text-sm font-semibold text-blue-900 mb-2">Welcome SMS - How it works:</p>
-                  <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
-                    <li>New patient is registered in the system</li>
-                    <li>System automatically sends welcome SMS to patient's phone number</li>
-                    <li>Patient receives a welcome message from the clinic</li>
-                  </ol>
-                </div>
-              </div>
-
-              <div className="border-t border-gray-200 pt-6 mt-6">
-                <h3 className="text-md font-semibold text-gray-900 mb-4">Test SMS Configuration</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Send a test SMS to verify your credentials are working correctly.
-                </p>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={testPhone}
-                    onChange={(e) => setTestPhone(e.target.value)}
-                    placeholder="Enter phone number (e.g., 0794100044)"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled={testingSms || !isAdmin}
-                  />
-                  <button
-                    onClick={handleTestSms}
-                    disabled={testingSms || !isAdmin}
-                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center space-x-2"
-                  >
-                    <Send className="h-4 w-4" />
-                    <span>{testingSms ? 'Sending...' : 'Send Test SMS'}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-6">
-                <p className="text-sm font-semibold text-yellow-900 mb-1">Important Notes:</p>
-                <ul className="text-sm text-yellow-800 space-y-1 list-disc list-inside">
-                  <li>Patient phone numbers can start with 0 or 255 (Tanzania)</li>
-                  <li>SMS credits must be purchased from Beem Africa</li>
-                  <li>Get your API credentials from <a href="https://beem.africa" target="_blank" rel="noopener noreferrer" className="underline font-medium">beem.africa</a></li>
-                </ul>
-              </div>
-
-              {!isAdmin && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                  <p className="text-sm text-yellow-800">
-                    Only administrators can modify SMS notification settings.
-                  </p>
-                </div>
-              )}
             </div>
           </div>
 
@@ -1071,22 +396,12 @@ export default function Settings() {
                         )}
                       </div>
                       {isAdmin && (
-                        <div className="flex items-center space-x-1 ml-2">
-                          <button
-                            onClick={() => setEditingUnit({ ...unit })}
-                            className="text-blue-600 hover:text-blue-800 p-1.5 rounded hover:bg-blue-50 transition-colors"
-                            title="Edit unit"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteUnit(unit.id, unit.name)}
-                            className="text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors"
-                            title="Delete unit"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={() => handleDeleteUnit(unit.id, unit.name)}
+                          className="ml-2 text-red-600 hover:text-red-800 p-1.5 rounded hover:bg-red-50 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   ))}
@@ -1104,12 +419,6 @@ export default function Settings() {
           </div>
         </div>
       </div>
-
-      {isAdmin && (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mt-8">
-          <InterpretationRulesManager />
-        </div>
-      )}
 
       {showAddUnit && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -1157,55 +466,6 @@ export default function Settings() {
                 className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium shadow-sm hover:shadow-md transition-all disabled:bg-gray-400"
               >
                 {addingUnit ? 'Adding...' : 'Add Unit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {editingUnit && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-          <div className="bg-white rounded-2xl p-8 max-w-md w-full shadow-2xl">
-            <h2 className="text-2xl font-bold mb-4 text-gray-900">Edit Unit</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Unit Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={editingUnit.name}
-                  onChange={(e) => setEditingUnit({ ...editingUnit, name: e.target.value })}
-                  placeholder="e.g., kg, mg, l"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Description
-                </label>
-                <input
-                  type="text"
-                  value={editingUnit.description}
-                  onChange={(e) => setEditingUnit({ ...editingUnit, description: e.target.value })}
-                  placeholder="e.g., Kilogram"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-4 mt-6">
-              <button
-                onClick={() => setEditingUnit(null)}
-                className="px-6 py-3 border-2 border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveUnit}
-                disabled={savingUnit}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm hover:shadow-md transition-all disabled:bg-gray-400"
-              >
-                {savingUnit ? 'Saving...' : 'Save Changes'}
               </button>
             </div>
           </div>

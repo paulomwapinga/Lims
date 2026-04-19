@@ -123,15 +123,15 @@ export default function Dashboard() {
         const [pendingRes, inProgressRes, completedRes] = await Promise.all([
           supabase
             .from('visit_tests')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact' })
             .eq('results_status', 'pending'),
           supabase
             .from('visit_tests')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact' })
             .eq('results_status', 'in_progress'),
           supabase
             .from('visit_tests')
-            .select('*', { count: 'exact', head: true })
+            .select('id', { count: 'exact' })
             .eq('results_status', 'completed')
             .gte('results_entered_at', todayStart),
         ]);
@@ -150,18 +150,32 @@ export default function Dashboard() {
           completedTestsToday: completedRes.count || 0,
         });
       } else {
-        const [todayPatientsRes, patientsRes, lowStockRes, revenueRes] = await Promise.all([
-          supabase.rpc('count_distinct_patients_today', { today_start: todayStart }),
-          supabase.from('patients').select('*', { count: 'exact', head: true }),
-          supabase.rpc('count_low_stock_items'),
-          supabase.from('visits').select('total').gte('created_at', todayStart),
+        const [todayPatientsRes, patientsRes, inventoryRes, revenueRes] = await Promise.all([
+          supabase
+            .from('visits')
+            .select('patient_id')
+            .gte('created_at', todayStart),
+          supabase.from('patients').select('id', { count: 'exact' }),
+          supabase
+            .from('inventory_items')
+            .select('qty_on_hand, reorder_level'),
+          supabase
+            .from('visits')
+            .select('total')
+            .gte('created_at', todayStart),
         ]);
 
+        if (todayPatientsRes.error) console.error('Today patients error:', todayPatientsRes.error);
         if (patientsRes.error) console.error('Patients error:', patientsRes.error);
+        if (inventoryRes.error) console.error('Inventory error:', inventoryRes.error);
         if (revenueRes.error) console.error('Revenue error:', revenueRes.error);
 
-        const todayPatientsCount = (todayPatientsRes.data as number) || 0;
-        const lowStockItems = (lowStockRes.data as number) || 0;
+        const uniquePatientIds = new Set(todayPatientsRes.data?.map(v => v.patient_id) || []);
+        const todayPatientsCount = uniquePatientIds.size;
+
+        const lowStockItems = inventoryRes.data?.filter(
+          item => item.qty_on_hand <= item.reorder_level
+        ).length || 0;
 
         const todayRevenue = revenueRes.data?.reduce((sum, v) => sum + Number(v.total), 0) || 0;
 
@@ -229,7 +243,7 @@ export default function Dashboard() {
         <h1 className="text-3xl font-bold text-slate-900 mb-2">
           Dashboard
         </h1>
-        <p className="text-slate-600 font-medium">Overview of your laboratory operation</p>
+        <p className="text-slate-600 font-medium">Overview of your laboratory operations</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
