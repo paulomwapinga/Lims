@@ -95,7 +95,8 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
           )
         `)
         .eq('visit.doctor_id', user.id)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
       setVisitTests(data as any || []);

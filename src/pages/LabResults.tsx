@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, Edit, Send, Trash2 } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -99,7 +99,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             name
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
       setVisitTests(data as any || []);
