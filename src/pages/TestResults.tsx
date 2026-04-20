@@ -108,58 +108,46 @@ export default function TestResults({ onViewResults }: TestResultsProps) {
     if (!user) return;
 
     try {
-      const from = (currentPage - 1) * itemsPerPage;
-      const to = from + itemsPerPage - 1;
+      const offset = (currentPage - 1) * itemsPerPage;
 
-      let query = supabase
-        .from('visit_tests')
-        .select(`
-          id,
-          visit_id,
-          test_id,
-          results_status,
-          results_entered_at,
-          sent_to_doctor_at,
-          sms_sent_at,
-          doctor_viewed_at,
-          created_at,
-          visit:visits!inner (
-            id,
-            created_at,
-            doctor_id,
-            patient:patients!inner (
-              id,
-              name,
-              phone
-            )
-          ),
-          test:tests!inner (
-            name
-          )
-        `, { count: 'exact' })
-        .order('created_at', { ascending: false });
-
-      if (statusFilter !== 'all') {
-        query = query.eq('results_status', statusFilter);
-      }
-
-      const { data, error, count } = searchTerm
-        ? await query.range(0, 9999)
-        : await query.range(from, to);
+      const { data, error } = await supabase.rpc('search_visit_tests', {
+        search_term: searchTerm,
+        status_filter: statusFilter,
+        page_offset: offset,
+        page_limit: itemsPerPage,
+      });
 
       if (error) throw error;
 
-      let results = (data as any[]) || [];
-      if (searchTerm) {
-        const lower = searchTerm.toLowerCase();
-        results = results.filter((vt: VisitTest) =>
-          vt.visit?.patient?.name?.toLowerCase().includes(lower) ||
-          vt.test?.name?.toLowerCase().includes(lower)
-        );
-      }
+      const rows = (data as any[]) || [];
+      const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
+
+      const results: VisitTest[] = rows.map((row: any) => ({
+        id: row.id,
+        visit_id: row.visit_id,
+        test_id: row.test_id,
+        results_status: row.results_status,
+        results_entered_at: row.results_entered_at,
+        sent_to_doctor_at: row.sent_to_doctor_at,
+        sms_sent_at: row.sms_sent_at,
+        doctor_viewed_at: row.doctor_viewed_at,
+        created_at: row.created_at,
+        visit: {
+          id: row.visit_id,
+          created_at: row.visit_created_at,
+          patient: {
+            id: row.patient_id,
+            name: row.patient_name,
+            phone: row.patient_phone,
+          },
+        },
+        test: {
+          name: row.test_name,
+        },
+      }));
 
       setVisitTests(results);
-      setTotalItems(searchTerm ? results.length : (count || 0));
+      setTotalItems(totalCount);
     } catch (error) {
       console.error('Error loading test results:', error);
       alert('Failed to load test results');
