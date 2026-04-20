@@ -151,7 +151,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
       }
 
       const { data, error, count } = searchTerm
-        ? await query
+        ? await query.range(0, 9999)
         : await query.range(from, to);
 
       if (error) throw error;
