@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { detectAbnormality } from '../lib/abnormalityDetection';
+import { detectAbnormality, detectAbnormalityWithRules } from '../lib/abnormalityDetection';
 import { ArrowLeft, Save, CheckCircle, Send, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface TestParameter {
@@ -36,6 +36,11 @@ interface VisitTestInfo {
     patient: {
       id: string;
       name: string;
+      phone: string | null;
+      age: number | null;
+      age_unit: string | null;
+      dob: string | null;
+      gender: string;
     };
     doctor: {
       id: string;
@@ -65,6 +70,56 @@ interface LabResultsEntryProps {
   onSaved?: () => void;
 }
 
+function calculateAgeFromDOB(dob: string): { value: number; unit: string; display: string } {
+  const birthDate = new Date(dob);
+  const today = new Date();
+
+  let years = today.getFullYear() - birthDate.getFullYear();
+  let months = today.getMonth() - birthDate.getMonth();
+  let days = today.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months--;
+    const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += lastMonth.getDate();
+  }
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  if (years === 0 && months === 0) {
+    return {
+      value: days,
+      unit: 'days',
+      display: `${days} ${days === 1 ? 'day' : 'days'}`
+    };
+  }
+
+  if (years === 0) {
+    return {
+      value: months,
+      unit: 'months',
+      display: `${months} ${months === 1 ? 'month' : 'months'}`
+    };
+  }
+
+  if (months === 0) {
+    return {
+      value: years,
+      unit: 'years',
+      display: `${years} ${years === 1 ? 'year' : 'years'}`
+    };
+  }
+
+  return {
+    value: years,
+    unit: 'years',
+    display: `${years} ${years === 1 ? 'year' : 'years'} ${months} ${months === 1 ? 'month' : 'months'}`
+  };
+}
+
 export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabResultsEntryProps) {
   const { user } = useAuth();
   const [visitTest, setVisitTest] = useState<VisitTestInfo | null>(null);
@@ -82,32 +137,46 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
 
   const loadData = async () => {
     try {
-      const [visitTestData, existingResultsData] = await Promise.all([
+      const { data: visitTestData, error: visitTestError } = await supabase
+        .from('visit_tests')
+        .select(`
+          id,
+          results_status,
+          technician_notes,
+          sent_to_doctor_at,
+          visit_id,
+          test_id
+        `)
+        .eq('id', visitTestId)
+        .maybeSingle();
+
+      if (visitTestError) {
+        console.error('Error loading visit test:', visitTestError);
+        throw visitTestError;
+      }
+
+      if (!visitTestData) {
+        console.error('Visit test not found:', visitTestId);
+        throw new Error('Visit test not found');
+      }
+
+      const [visitData, testData, existingResultsData] = await Promise.all([
         supabase
-          .from('visit_tests')
+          .from('visits')
           .select(`
             id,
-            results_status,
-            technician_notes,
-            sent_to_doctor_at,
-            visit:visits (
-              id,
-              created_at,
-              patient:patients (
-                id,
-                name
-              ),
-              doctor:users!visits_doctor_id_fkey (
-                id,
-                name
-              )
-            ),
-            test:tests (
-              id,
-              name
-            )
+            created_at,
+            patient_id,
+            doctor_id,
+            patients(id, name, phone, age, age_unit, dob, gender),
+            users!visits_doctor_id_fkey(id, name)
           `)
-          .eq('id', visitTestId)
+          .eq('id', visitTestData.visit_id)
+          .maybeSingle(),
+        supabase
+          .from('tests')
+          .select('id, name')
+          .eq('id', visitTestData.test_id)
           .maybeSingle(),
         supabase
           .from('visit_test_results')
@@ -115,17 +184,39 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
           .eq('visit_test_id', visitTestId)
       ]);
 
-      if (visitTestData.error) {
-        console.error('Error loading visit test:', visitTestData.error);
-        throw visitTestData.error;
-      }
+      if (visitData.error) throw visitData.error;
+      if (testData.error) throw testData.error;
 
-      if (!visitTestData.data) {
-        console.error('Visit test not found:', visitTestId);
-        throw new Error('Visit test not found');
-      }
-      setVisitTest(visitTestData.data as any);
-      setTechnicianNotes(visitTestData.data.technician_notes || '');
+      const combinedVisitTest: VisitTestInfo = {
+        id: visitTestData.id,
+        results_status: visitTestData.results_status,
+        technician_notes: visitTestData.technician_notes,
+        sent_to_doctor_at: visitTestData.sent_to_doctor_at,
+        visit: {
+          id: visitData.data?.id || '',
+          created_at: visitData.data?.created_at || '',
+          patient: {
+            id: (visitData.data?.patients as any)?.id || '',
+            name: (visitData.data?.patients as any)?.name || 'Unknown',
+            phone: (visitData.data?.patients as any)?.phone || null,
+            age: (visitData.data?.patients as any)?.age || null,
+            age_unit: (visitData.data?.patients as any)?.age_unit || null,
+            dob: (visitData.data?.patients as any)?.dob || null,
+            gender: (visitData.data?.patients as any)?.gender || 'Unknown'
+          },
+          doctor: {
+            id: (visitData.data?.users as any)?.id || '',
+            name: (visitData.data?.users as any)?.name || 'Unknown'
+          }
+        },
+        test: {
+          id: testData.data?.id || '',
+          name: testData.data?.name || 'Unknown'
+        }
+      };
+
+      setVisitTest(combinedVisitTest);
+      setTechnicianNotes(visitTestData.technician_notes || '');
 
       if (existingResultsData.data) {
         setExistingResults(existingResultsData.data);
@@ -145,20 +236,20 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
       const { data: parametersData, error: paramsError } = await supabase
         .from('test_parameters')
         .select('*')
-        .eq('test_id', (visitTestData.data as any).test.id)
+        .eq('test_id', testData.data?.id)
         .order('sort_order', { ascending: true });
 
       if (paramsError) throw paramsError;
       setParameters(parametersData || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading data:', error);
-      alert('Failed to load test information');
+      alert(`Failed to load test information: ${error.message || 'Unknown error'}`);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleValueChange = (parameterId: string, value: string) => {
+  const handleValueChange = async (parameterId: string, value: string) => {
     const newResults = new Map(results);
     const existing = newResults.get(parameterId) || {
       parameter_id: parameterId,
@@ -169,20 +260,18 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
     };
 
     const parameter = parameters.find(p => p.id === parameterId);
-    if (parameter && parameter.parameter_type === 'numeric') {
-      const refFrom = parameter.ref_range_from ? parseFloat(parameter.ref_range_from) : null;
-      const refTo = parameter.ref_range_to ? parseFloat(parameter.ref_range_to) : null;
-      const detection = detectAbnormality(value, refFrom, refTo);
 
-      newResults.set(parameterId, {
-        ...existing,
-        value,
-        is_abnormal: detection.isAbnormal,
-        abnormality_type: detection.abnormalityType
-      });
-    } else {
-      newResults.set(parameterId, { ...existing, value });
-    }
+    const refFrom = parameter?.ref_range_from ? parseFloat(parameter.ref_range_from) : null;
+    const refTo = parameter?.ref_range_to ? parseFloat(parameter.ref_range_to) : null;
+
+    const detection = await detectAbnormalityWithRules(value, parameterId, refFrom, refTo);
+
+    newResults.set(parameterId, {
+      ...existing,
+      value,
+      is_abnormal: detection.isAbnormal,
+      abnormality_type: detection.abnormalityType
+    });
 
     setResults(newResults);
   };
@@ -196,7 +285,24 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
       abnormality_type: null,
       notes: ''
     };
-    newResults.set(parameterId, { ...existing, is_abnormal: isAbnormal });
+
+    let abnormalityType: 'L' | 'H' | null = null;
+
+    if (isAbnormal && existing.value) {
+      const parameter = parameters.find(p => p.id === parameterId);
+      if (parameter) {
+        const refFrom = parameter.ref_range_from ? parseFloat(parameter.ref_range_from) : null;
+        const refTo = parameter.ref_range_to ? parseFloat(parameter.ref_range_to) : null;
+        const detection = detectAbnormality(existing.value, refFrom, refTo);
+        abnormalityType = detection.abnormalityType;
+      }
+    }
+
+    newResults.set(parameterId, {
+      ...existing,
+      is_abnormal: isAbnormal,
+      abnormality_type: isAbnormal ? abnormalityType : null
+    });
     setResults(newResults);
   };
 
@@ -259,9 +365,11 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
 
       const resultsResponse = await Promise.all(upsertPromises);
 
-      const hasErrors = resultsResponse.some(r => r.error);
-      if (hasErrors) {
-        throw new Error('Failed to save some results');
+      const errors = resultsResponse.filter(r => r.error);
+      if (errors.length > 0) {
+        console.error('Errors saving results:', errors);
+        const errorMessages = errors.map(e => e.error?.message || 'Unknown error').join(', ');
+        throw new Error(`Failed to save results: ${errorMessages}`);
       }
 
       const newStatus = markComplete ? 'completed' : 'in_progress';
@@ -280,7 +388,10 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
         .update(updateData)
         .eq('id', visitTestId);
 
-      if (statusError) throw statusError;
+      if (statusError) {
+        console.error('Error updating visit_tests status:', statusError);
+        throw statusError;
+      }
 
       alert(markComplete ? 'Results saved and marked as complete!' : 'Results saved as draft!');
 
@@ -295,7 +406,8 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
       }
     } catch (error) {
       console.error('Error saving results:', error);
-      alert('Failed to save results. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      alert(`Failed to save results: ${errorMessage}`);
     } finally {
       setSaving(false);
     }
@@ -324,19 +436,67 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
 
         if (updateError) throw updateError;
 
-        const { error: notifError } = await supabase
-          .from('notifications')
-          .insert({
+        const { data: adminUsers } = await supabase
+          .from('users')
+          .select('id')
+          .eq('role', 'admin');
+
+        const notificationsToInsert = [
+          {
             user_id: visitTest.visit.doctor.id,
             type: 'lab_result_ready',
             title: 'Lab Results Ready',
             message: `Lab results for ${visitTest.test.name} are ready for patient ${visitTest.visit.patient.name}`,
             related_visit_test_id: visitTestId
+          }
+        ];
+
+        if (adminUsers && adminUsers.length > 0) {
+          adminUsers.forEach(admin => {
+            notificationsToInsert.push({
+              user_id: admin.id,
+              type: 'lab_result_ready',
+              title: 'Lab Results Ready',
+              message: `Lab results for ${visitTest.test.name} are ready for patient ${visitTest.visit.patient.name}`,
+              related_visit_test_id: visitTestId
+            });
           });
+        }
+
+        const { error: notifError } = await supabase
+          .from('notifications')
+          .insert(notificationsToInsert);
 
         if (notifError) throw notifError;
 
-        alert('Results successfully sent to doctor!');
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session) {
+            const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
+            const response = await fetch(apiUrl, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${session.access_token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                visit_test_id: visitTestId,
+                recipient_type: 'doctor',
+              }),
+            });
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+              console.log('SMS sent to doctor');
+            } else {
+              console.warn('Failed to send SMS to doctor:', result.error);
+            }
+          }
+        } catch (smsError) {
+          console.warn('SMS notification failed (non-critical):', smsError);
+        }
+
+        alert('Results successfully sent to doctor and admin!');
 
         if (onSaved) {
           onSaved();
@@ -553,13 +713,24 @@ export default function LabResultsEntry({ visitTestId, onBack, onSaved }: LabRes
             </span>
           </div>
           <div className="flex items-center">
+            <span className="text-gray-500 font-medium min-w-[100px]">Age/Gender:</span>
+            <span className="font-semibold text-gray-900">
+              {visitTest.visit.patient.dob
+                ? calculateAgeFromDOB(visitTest.visit.patient.dob).display
+                : (visitTest.visit.patient.age ? `${visitTest.visit.patient.age} ${visitTest.visit.patient.age_unit || 'years'}` : 'N/A')}
+            </span>
+            <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded bg-gray-100">
+              {visitTest.visit.patient.gender}
+            </span>
+          </div>
+          <div className="flex items-center">
             <span className="text-gray-500 font-medium min-w-[100px]">Doctor:</span>
             <span className="font-semibold text-gray-900">Dr. {visitTest.visit.doctor.name}</span>
           </div>
           <div className="flex items-center">
             <span className="text-gray-500 font-medium min-w-[100px]">Visit Date:</span>
             <span className="font-semibold text-gray-900">
-              {formatDate(visitTest.visit.created_at)}
+              {formatDateTime(visitTest.visit.created_at)}
             </span>
           </div>
           <div className="flex items-center">

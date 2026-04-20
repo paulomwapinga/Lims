@@ -1,7 +1,9 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 import { getCurrentDateTime } from './timezone';
+import { playNotificationSound } from './notificationSound';
+import { useToast } from '../components/ToastContainer';
 
 interface Notification {
   id: string;
@@ -30,8 +32,11 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
+  const previousUnreadCount = useRef<number>(0);
+  const { showToast } = useToast();
+  const processedNotificationIds = useRef<Set<string>>(new Set());
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = async (playSound: boolean = false) => {
     if (!user) {
       setNotifications([]);
       setLoading(false);
@@ -46,7 +51,23 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
         .limit(50);
 
       if (error) throw error;
-      setNotifications(data || []);
+
+      const newNotifications = data || [];
+
+      const newUnreadNotifications = newNotifications.filter(
+        n => !n.is_read && !processedNotificationIds.current.has(n.id)
+      );
+
+      if (playSound && newUnreadNotifications.length > 0) {
+        playNotificationSound();
+
+        newUnreadNotifications.forEach(notif => {
+          processedNotificationIds.current.add(notif.id);
+          showToast(notif.message, 'info');
+        });
+      }
+
+      setNotifications(newNotifications);
     } catch (error) {
       console.error('Error fetching notifications:', error);
     } finally {
@@ -113,7 +134,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    fetchNotifications();
+    fetchNotifications(false);
 
     const channel = supabase
       .channel('notifications_changes')
@@ -126,7 +147,7 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
           filter: `user_id=eq.${user?.id}`
         },
         () => {
-          fetchNotifications();
+          fetchNotifications(true);
         }
       )
       .subscribe();

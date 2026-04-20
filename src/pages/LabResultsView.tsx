@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
-import { ArrowLeft, Printer, Edit, Trash2, Download, TrendingDown, TrendingUp } from 'lucide-react';
+import { ArrowLeft, Printer, CreditCard as Edit, Trash2, Download, TrendingDown, TrendingUp } from 'lucide-react';
 
 interface TestParameter {
   id: string;
@@ -35,6 +35,8 @@ interface VisitTestInfo {
       name: string;
       dob: string;
       gender: string;
+      age: number;
+      age_unit: string;
     };
   };
   test: {
@@ -52,17 +54,56 @@ interface LabResultsViewProps {
   onEdit?: () => void;
 }
 
-const calculateAge = (dob: string): number => {
-  const birthDate = new Date(dob);
-  const today = new Date();
-  let age = today.getFullYear() - birthDate.getFullYear();
-  const monthDiff = today.getMonth() - birthDate.getMonth();
-
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
-    age--;
+const calculateAge = (dob: string): { value: number; unit: string; display: string } => {
+  if (!dob) {
+    return { value: 0, unit: 'years', display: 'Unknown' };
   }
 
-  return age;
+  const birthDate = new Date(dob);
+  const today = new Date();
+
+  let years = today.getFullYear() - birthDate.getFullYear();
+  let months = today.getMonth() - birthDate.getMonth();
+  let days = today.getDate() - birthDate.getDate();
+
+  if (days < 0) {
+    months--;
+    const lastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+    days += lastMonth.getDate();
+  }
+
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  // For very young patients (less than 1 year)
+  if (years === 0 && months === 0) {
+    return {
+      value: days,
+      unit: 'days',
+      display: `${days} ${days === 1 ? 'day' : 'days'}`
+    };
+  }
+
+  // For infants (less than 1 year old)
+  if (years === 0) {
+    return {
+      value: months,
+      unit: 'months',
+      display: `${months} ${months === 1 ? 'month' : 'months'}`
+    };
+  }
+
+  // For everyone else, show years and optionally months
+  const yearText = `${years} ${years === 1 ? 'year' : 'years'}`;
+  const monthText = months > 0 ? ` ${months} ${months === 1 ? 'month' : 'months'}` : '';
+
+  return {
+    value: years,
+    unit: 'years',
+    display: `${yearText}${monthText}`
+  };
 };
 
 export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResultsViewProps) {
@@ -118,7 +159,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
 
   const loadData = async () => {
     try {
-      const [visitTestData, resultsData, settingsData] = await Promise.all([
+      const [visitTestData, resultsData, keyValueData, signatureData] = await Promise.all([
         supabase
           .from('visit_tests')
           .select(`
@@ -134,7 +175,9 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                 id,
                 name,
                 dob,
-                gender
+                gender,
+                age,
+                age_unit
               )
             ),
             test:tests (
@@ -166,7 +209,13 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
           .eq('visit_test_id', visitTestId),
         supabase
           .from('settings')
-          .select('key, value')
+          .select('key, value'),
+        supabase
+          .from('settings')
+          .select('signature_image')
+          .not('signature_image', 'is', null)
+          .limit(1)
+          .maybeSingle()
       ]);
 
       if (visitTestData.error) {
@@ -190,20 +239,31 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
           (a: TestResult, b: TestResult) =>
             a.test_parameter.sort_order - b.test_parameter.sort_order
         );
+        console.log('Test Results Data:', sortedResults);
         setResults(sortedResults);
       }
 
-      if (settingsData.error) {
-        console.error('Settings error (non-fatal):', settingsData.error);
+      if (keyValueData.error) {
+        console.error('Settings error (non-fatal):', keyValueData.error);
       }
 
-      if (settingsData.data) {
-        const settingsMap: any = {};
-        settingsData.data.forEach((item: any) => {
+      const settingsMap: any = {};
+
+      if (keyValueData.data) {
+        keyValueData.data.forEach((item: any) => {
           settingsMap[item.key] = item.value;
         });
-        setSettings(settingsMap);
       }
+
+      if (signatureData.error) {
+        console.error('Signature error (non-fatal):', signatureData.error);
+      }
+
+      if (signatureData.data?.signature_image) {
+        settingsMap.signature_image = signatureData.data.signature_image;
+      }
+
+      setSettings(settingsMap);
 
       if (visitTestData.data?.results_entered_by) {
         const { data: userData } = await supabase
@@ -327,7 +387,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
             Back to List
           </button>
           <div className="flex gap-2">
-          {onEdit && (
+          {onEdit && (profile?.role === 'admin' || profile?.role === 'lab_tech') && (
             <button
               onClick={onEdit}
               className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
@@ -410,7 +470,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
 
           <div className="px-8 py-6">
 
-            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-6 mb-6 border-2 border-blue-100 no-break">
+            <div className="bg-gradient-to-br from-gray-50 to-blue-50 rounded-xl p-6 mb-6 border-2 border-blue-100">
             <div className="flex items-center mb-4">
               <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-bold uppercase tracking-wider">
                 Patient Information
@@ -432,7 +492,13 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                   <div>
                     <span className="text-xs uppercase tracking-wider text-blue-600 font-bold block mb-1">Date of Birth</span>
                     <span className="text-gray-900 font-semibold">
-                      {formatDate(visitTest.visit.patient.dob)} ({calculateAge(visitTest.visit.patient.dob)} years)
+                      {visitTest.visit.patient.dob ? (
+                        <>
+                          {formatDate(visitTest.visit.patient.dob)} <span className="text-sm">({calculateAge(visitTest.visit.patient.dob).display})</span>
+                        </>
+                      ) : (
+                        'N/A'
+                      )}
                     </span>
                   </div>
                   <div>
@@ -470,7 +536,7 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
             </div>
           </div>
 
-          <div className="mb-6 no-break">
+          <div className="mb-6">
             <div className="flex items-center mb-4">
               <div className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm font-bold uppercase tracking-wider">
                 Test Results
@@ -545,26 +611,38 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                                 : '-'}
                         </td>
                         <td className="py-4 px-5 text-sm text-center">
-                          {result.is_abnormal ? (
-                            result.abnormality_type === 'L' ? (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
-                                <TrendingDown className="w-3.5 h-3.5 mr-1" />
-                                LOW (L)
-                              </span>
-                            ) : result.abnormality_type === 'H' ? (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                <TrendingUp className="w-3.5 h-3.5 mr-1" />
-                                HIGH (H)
-                              </span>
+                          {result.test_parameter.ref_range_from !== null || result.test_parameter.ref_range_to !== null ? (
+                            result.is_abnormal ? (
+                              result.abnormality_type === 'L' ? (
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold text-xs shadow-md">
+                                  <TrendingDown className="w-3.5 h-3.5 mr-1" />
+                                  LOW (L)
+                                </span>
+                              ) : result.abnormality_type === 'H' ? (
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                  <TrendingUp className="w-3.5 h-3.5 mr-1" />
+                                  HIGH (H)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                  ABNORMAL
+                                </span>
+                              )
                             ) : (
-                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
-                                ABNORMAL
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
+                                NORMAL
                               </span>
                             )
                           ) : (
-                            <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
-                              NORMAL
-                            </span>
+                            result.is_abnormal ? (
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-red-600 text-white font-bold text-xs shadow-md">
+                                ABNORMAL
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-green-600 text-white font-bold text-xs shadow-md">
+                                NORMAL
+                              </span>
+                            )
                           )}
                         </td>
                       </tr>
@@ -597,8 +675,8 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                     {enteredByName || 'N/A'}
                   </p>
                   {enteredByRole && (
-                    <p className="text-xs text-blue-600 mt-1 capitalize font-semibold">
-                      {enteredByRole.replace('_', ' ')}
+                    <p className="text-xs text-blue-600 mt-1 uppercase font-semibold">
+                      {enteredByRole === 'lab_tech' ? 'Lab Technician' : enteredByRole.replace('_', ' ')}
                     </p>
                   )}
                 </div>
@@ -618,8 +696,18 @@ export default function LabResultsView({ visitTestId, onBack, onEdit }: LabResul
                   <p className="font-bold text-gray-900 mb-2 text-sm uppercase tracking-wider">Authorized Signature</p>
                   <div className="flex-grow flex items-end">
                     <div className="w-full">
-                      <div className="border-b-2 border-gray-900 w-full mb-2 mt-12"></div>
-                      <p className="text-xs text-gray-700 text-center font-semibold">MEDICAL LAB SCIENTIST / LAB TECH</p>
+                      {settings?.signature_image ? (
+                        <div className="mb-2">
+                          <img
+                            src={settings.signature_image}
+                            alt="Authorized Signature"
+                            className="max-h-16 max-w-full object-contain mx-auto"
+                          />
+                        </div>
+                      ) : (
+                        <div className="border-b-2 border-gray-900 w-full mb-2 mt-12"></div>
+                      )}
+                      <p className="text-xs text-gray-700 text-center font-semibold">LAB TECHNICIAN</p>
                     </div>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { useAuth } from '../lib/auth';
 import NotificationsDropdown from './NotificationsDropdown';
+import RealtimeNotifications from './RealtimeNotifications';
 import {
   LayoutDashboard,
   Users,
@@ -16,6 +17,8 @@ import {
   Settings,
   ShoppingCart,
   History,
+  MessageSquare,
+  Building2,
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -44,8 +47,10 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { id: 'lab-results', label: 'Lab Results', icon: FlaskConical },
     { id: 'inventory', label: 'Inventory', icon: Package },
     { id: 'purchases', label: 'Purchases', icon: ShoppingCart },
+    { id: 'suppliers', label: 'Suppliers', icon: Building2 },
     { id: 'tests', label: 'Tests Management', icon: Settings },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
+    { id: 'communication', label: 'Communication', icon: MessageSquare },
     { id: 'users', label: 'Users', icon: User },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
@@ -62,6 +67,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <RealtimeNotifications />
       <div className="flex h-screen overflow-hidden">
         <aside
           className={`${
@@ -116,8 +122,8 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-white truncate">{profile?.name}</p>
-                  <p className="text-xs text-slate-400 capitalize font-medium">
-                    {profile?.role === 'lab_tech' ? 'Lab Tech' : profile?.role}
+                  <p className="text-xs text-slate-400 uppercase font-medium">
+                    {profile?.role === 'lab_tech' ? 'Lab Technician' : profile?.role}
                   </p>
                 </div>
               </div>
@@ -140,7 +146,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
               </button>
               <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent lg:hidden">Remtullah Medical</h1>
               <div className="hidden lg:block flex-1"></div>
-              {profile?.role === 'doctor' && (
+              {(profile?.role === 'doctor' || profile?.role === 'admin') && (
                 <NotificationsDropdown />
               )}
             </div>

@@ -1,51 +1,51 @@
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useCallback } from 'react';
+import Toast from './Toast';
 
-interface ToastContextValue {
-  showToast: (message: string, type?: 'success' | 'error' | 'info') => void;
-}
-
-const ToastContext = createContext<ToastContextValue>({ showToast: () => {} });
-
-export function useToast() {
-  return useContext(ToastContext);
-}
-
-interface Toast {
-  id: number;
+interface ToastMessage {
+  id: string;
   message: string;
-  type: 'success' | 'error' | 'info';
+  type: 'success' | 'info' | 'warning' | 'error';
 }
+
+interface ToastContextType {
+  showToast: (message: string, type?: 'success' | 'info' | 'warning' | 'error') => void;
+}
+
+const ToastContext = createContext<ToastContextType | undefined>(undefined);
 
 export function ToastProvider({ children }: { children: ReactNode }) {
-  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-    const id = Date.now();
+  const showToast = useCallback((message: string, type: 'success' | 'info' | 'warning' | 'error' = 'info') => {
+    const id = Date.now().toString();
     setToasts(prev => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts(prev => prev.filter(t => t.id !== id));
-    }, 3000);
-  }
+  }, []);
 
-  const colorMap = {
-    success: 'bg-green-600',
-    error: 'bg-red-600',
-    info: 'bg-blue-600',
-  };
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  }, []);
 
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
-        {toasts.map(t => (
-          <div
-            key={t.id}
-            className={`${colorMap[t.type]} text-white px-4 py-2 rounded shadow-lg text-sm max-w-sm`}
-          >
-            {t.message}
-          </div>
+      <div className="fixed top-4 right-4 z-50 space-y-2">
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={() => removeToast(toast.id)}
+          />
         ))}
       </div>
     </ToastContext.Provider>
   );
+}
+
+export function useToast() {
+  const context = useContext(ToastContext);
+  if (!context) {
+    throw new Error('useToast must be used within a ToastProvider');
+  }
+  return context;
 }

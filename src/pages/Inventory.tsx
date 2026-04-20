@@ -2,7 +2,7 @@ import { useEffect, useState, FormEvent } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
-import { Plus, Package, AlertTriangle, ArrowUp, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Package, AlertTriangle, ArrowUp, CreditCard as Edit2, Trash2, FlaskConical, ChevronDown, ChevronUp, Search } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface InventoryItem {
@@ -16,16 +16,34 @@ interface InventoryItem {
   sell_price: number;
 }
 
+interface TestRecipe {
+  test_id: string;
+  test_name: string;
+  quantity_required: number;
+}
+
+interface ItemRecipeInfo {
+  item_id: string;
+  recipe_count: number;
+  recipes: TestRecipe[];
+  min_tests_possible: number;
+}
+
 type DialogType = 'add' | 'edit' | 'stock-in' | 'adjust' | null;
 
 export default function Inventory() {
   const { profile } = useAuth();
   const [items, setItems] = useState<InventoryItem[]>([]);
+  const [recipeInfo, setRecipeInfo] = useState<Map<string, ItemRecipeInfo>>(new Map());
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<DialogType>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [filter, setFilter] = useState<'all' | 'low'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
   const itemsPerPage = 20;
 
   const [formData, setFormData] = useState({
@@ -45,22 +63,122 @@ export default function Inventory() {
 
   useEffect(() => {
     loadInventory();
+    loadRecipeInfo();
   }, []);
+
+  useEffect(() => {
+    loadInventory();
+  }, [currentPage, searchTerm, filter]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+      setCurrentPage(1);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   async function loadInventory() {
     try {
-      const { data, error } = await supabase
+      const from = (currentPage - 1) * itemsPerPage;
+      const to = from + itemsPerPage - 1;
+
+      let query = supabase
         .from('inventory_items')
-        .select('*')
+        .select('*', { count: 'exact' })
         .order('name');
 
-      if (error) throw error;
-      setItems(data || []);
+      if (searchTerm) {
+        query = query.or(`name.ilike.%${searchTerm}%,unit.ilike.%${searchTerm}%`);
+      }
+
+      if (filter === 'low') {
+        const { data: allData, error } = await query;
+        if (error) throw error;
+        const lowStock = (allData || []).filter(item => item.qty_on_hand <= item.reorder_level);
+        const start = (currentPage - 1) * itemsPerPage;
+        setItems(lowStock.slice(start, start + itemsPerPage));
+        setTotalItems(lowStock.length);
+      } else {
+        const { data, error, count } = await query.range(from, to);
+        if (error) throw error;
+        setItems(data || []);
+        setTotalItems(count || 0);
+      }
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
       setLoading(false);
     }
+  }
+
+  async function loadRecipeInfo() {
+    try {
+      const { data, error } = await supabase
+        .from('test_consumables')
+        .select(`
+          item_id,
+          quantity,
+          tests (
+            id,
+            name
+          )
+        `);
+
+      if (error) throw error;
+
+      const recipeMap = new Map<string, ItemRecipeInfo>();
+
+      data?.forEach((tc: any) => {
+        const itemId = tc.item_id;
+        const existing = recipeMap.get(itemId);
+
+        const recipe: TestRecipe = {
+          test_id: tc.tests.id,
+          test_name: tc.tests.name,
+          quantity_required: tc.quantity,
+        };
+
+        if (existing) {
+          existing.recipes.push(recipe);
+          existing.recipe_count = existing.recipes.length;
+        } else {
+          recipeMap.set(itemId, {
+            item_id: itemId,
+            recipe_count: 1,
+            recipes: [recipe],
+            min_tests_possible: 0,
+          });
+        }
+      });
+
+      setRecipeInfo(recipeMap);
+    } catch (error) {
+      console.error('Error loading recipe info:', error);
+    }
+  }
+
+  function calculateMinTestsPossible(item: InventoryItem): number {
+    const info = recipeInfo.get(item.id);
+    if (!info || info.recipes.length === 0) return 0;
+
+    let minTests = Infinity;
+    info.recipes.forEach((recipe) => {
+      const possibleTests = Math.floor(item.qty_on_hand / recipe.quantity_required);
+      minTests = Math.min(minTests, possibleTests);
+    });
+
+    return minTests === Infinity ? 0 : minTests;
+  }
+
+  function toggleRow(itemId: string) {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(itemId)) {
+      newExpanded.delete(itemId);
+    } else {
+      newExpanded.add(itemId);
+    }
+    setExpandedRows(newExpanded);
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -97,6 +215,7 @@ export default function Inventory() {
 
       closeDialog();
       loadInventory();
+      loadRecipeInfo();
     } catch (error) {
       console.error('Error saving item:', error);
       alert('Failed to save item');
@@ -232,19 +351,7 @@ export default function Inventory() {
     }
   }
 
-  const filteredItems =
-    filter === 'low'
-      ? items.filter((item) => item.qty_on_hand <= item.reorder_level)
-      : items;
-
-  const totalItems = filteredItems.length;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedItems = filteredItems.slice(startIndex, endIndex);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [filter]);
+  const paginatedItems = items;
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -265,30 +372,44 @@ export default function Inventory() {
         )}
       </div>
 
-      <div className="flex space-x-4 mb-6">
-        <button
-          onClick={() => setFilter('all')}
-          className={`px-4 py-2 rounded-lg ${
-            filter === 'all'
-              ? 'bg-blue-600 text-white'
-              : 'bg-white text-gray-700 border border-gray-300'
-          }`}
-        >
-          All Items ({items.length})
-        </button>
-        <button
-          onClick={() => setFilter('low')}
-          className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
-            filter === 'low'
-              ? 'bg-red-600 text-white'
-              : 'bg-white text-gray-700 border border-gray-300'
-          }`}
-        >
-          <AlertTriangle className="w-4 h-4" />
-          <span>
-            Low Stock ({items.filter((item) => item.qty_on_hand <= item.reorder_level).length})
-          </span>
-        </button>
+      <div className="flex flex-col sm:flex-row gap-4 mb-6">
+        <div className="flex-1 relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="h-5 w-5 text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+            placeholder="Search by name, type, or unit..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+        </div>
+        <div className="flex space-x-4">
+          <button
+            onClick={() => { setFilter('all'); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg ${
+              filter === 'all'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300'
+            }`}
+          >
+            All Items ({totalItems})
+          </button>
+          <button
+            onClick={() => { setFilter('low'); setCurrentPage(1); }}
+            className={`px-4 py-2 rounded-lg flex items-center space-x-2 ${
+              filter === 'low'
+                ? 'bg-red-600 text-white'
+                : 'bg-white text-gray-700 border border-gray-300'
+            }`}
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>
+              Low Stock ({items.filter((item) => item.qty_on_hand <= item.reorder_level).length})
+            </span>
+          </button>
+        </div>
       </div>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -316,85 +437,168 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {paginatedItems.map((item) => (
-              <tr
-                key={item.id}
-                className={
-                  item.qty_on_hand <= item.reorder_level ? 'bg-red-50' : 'hover:bg-gray-50'
-                }
-              >
-                <td className="px-6 py-4">
-                  <div className="flex items-center">
-                    <Package className="w-4 h-4 text-gray-400 mr-2" />
-                    <span className="font-medium text-gray-900">{item.name}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span
-                    className={`px-2 py-1 text-xs rounded ${
-                      item.type === 'medicine'
-                        ? 'bg-blue-100 text-blue-800'
-                        : 'bg-purple-100 text-purple-800'
-                    }`}
-                  >
-                    {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span
+            {paginatedItems.map((item) => {
+              const info = recipeInfo.get(item.id);
+              const isExpanded = expandedRows.has(item.id);
+              const hasRecipes = info && info.recipe_count > 0;
+
+              return (
+                <>
+                  <tr
+                    key={item.id}
                     className={
-                      item.qty_on_hand <= item.reorder_level
-                        ? 'font-bold text-red-600'
-                        : 'text-gray-900'
+                      item.qty_on_hand <= item.reorder_level ? 'bg-red-50' : 'hover:bg-gray-50'
                     }
                   >
-                    {item.qty_on_hand}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-gray-600">{item.unit}</td>
-                <td className="px-6 py-4 text-gray-900">{formatCurrency(item.sell_price)}</td>
-                <td className="px-6 py-4">
-                  {profile?.role === 'admin' ? (
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => openEditDialog(item)}
-                        className="text-blue-600 hover:text-blue-800"
-                        title="Edit"
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <Package className="w-4 h-4 text-gray-400 mr-2" />
+                        <div>
+                          <div className="font-medium text-gray-900">{item.name}</div>
+                          {item.type === 'lab_consumable' && hasRecipes && (
+                            <button
+                              onClick={() => toggleRow(item.id)}
+                              className="flex items-center space-x-1 text-xs text-blue-600 hover:text-blue-800 mt-1"
+                            >
+                              <FlaskConical className="w-3 h-3" />
+                              <span>Used in {info.recipe_count} {info.recipe_count === 1 ? 'recipe' : 'recipes'}</span>
+                              {isExpanded ? (
+                                <ChevronUp className="w-3 h-3" />
+                              ) : (
+                                <ChevronDown className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={`px-2 py-1 text-xs rounded ${
+                          item.type === 'medicine'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-green-100 text-green-800'
+                        }`}
                       >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openStockDialog(item, 'stock-in')}
-                        className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
-                        title="Stock In"
-                      >
-                        <ArrowUp className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openStockDialog(item, 'adjust')}
-                        className="bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700"
-                        title="Adjust"
-                      >
-                        Adjust
-                      </button>
-                      <button
-                        onClick={() => handleDeleteItem(item)}
-                        className="text-red-600 hover:text-red-800"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <span className="text-gray-400 text-sm">View only</span>
+                        {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div>
+                        <span
+                          className={
+                            item.qty_on_hand <= item.reorder_level
+                              ? 'font-bold text-red-600'
+                              : 'text-gray-900'
+                          }
+                        >
+                          {item.qty_on_hand}
+                        </span>
+                        {item.type === 'lab_consumable' && hasRecipes && (
+                          <div className="text-xs text-gray-500 mt-1">
+                            Min {calculateMinTestsPossible(item)} tests possible
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-gray-600">{item.unit}</td>
+                    <td className="px-6 py-4 text-gray-900">{formatCurrency(item.sell_price)}</td>
+                    <td className="px-6 py-4">
+                      {profile?.role === 'admin' ? (
+                        <div className="flex space-x-2">
+                          <button
+                            onClick={() => openEditDialog(item)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Edit"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openStockDialog(item, 'stock-in')}
+                            className="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700"
+                            title="Stock In"
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => openStockDialog(item, 'adjust')}
+                            className="bg-orange-600 text-white px-2 py-1 rounded text-xs hover:bg-orange-700"
+                            title="Adjust"
+                          >
+                            Adjust
+                          </button>
+                          <button
+                            onClick={() => handleDeleteItem(item)}
+                            className="text-red-600 hover:text-red-800"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-sm">View only</span>
+                      )}
+                    </td>
+                  </tr>
+                  {isExpanded && hasRecipes && (
+                    <tr key={`${item.id}-expanded`} className="bg-blue-50">
+                      <td colSpan={6} className="px-6 py-4">
+                        <div className="space-y-2">
+                          <h4 className="font-semibold text-sm text-gray-900 mb-2">
+                            Test Recipes Using This Item:
+                          </h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            {info.recipes.map((recipe) => {
+                              const testsCanPerform = Math.floor(
+                                item.qty_on_hand / recipe.quantity_required
+                              );
+                              return (
+                                <div
+                                  key={recipe.test_id}
+                                  className="bg-white rounded-lg p-3 border border-blue-200"
+                                >
+                                  <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2">
+                                        <FlaskConical className="w-4 h-4 text-blue-600" />
+                                        <span className="font-medium text-gray-900">
+                                          {recipe.test_name}
+                                        </span>
+                                      </div>
+                                      <div className="text-xs text-gray-600 mt-1">
+                                        Requires: {recipe.quantity_required} {item.unit} per test
+                                      </div>
+                                    </div>
+                                    <div className="text-right ml-4">
+                                      <div
+                                        className={`text-lg font-bold ${
+                                          testsCanPerform === 0
+                                            ? 'text-red-600'
+                                            : testsCanPerform < 10
+                                            ? 'text-orange-600'
+                                            : 'text-green-600'
+                                        }`}
+                                      >
+                                        {testsCanPerform}
+                                      </div>
+                                      <div className="text-xs text-gray-500">tests</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                </td>
-              </tr>
-            ))}
+                </>
+              );
+            })}
           </tbody>
         </table>
 
-        {filteredItems.length === 0 && (
+        {items.length === 0 && (
           <div className="text-center py-12 text-gray-500">No items found</div>
         )}
 

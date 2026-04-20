@@ -438,7 +438,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               </div>
               <div className="ml-5 w-0 flex-1">
                 <dl>
-                  <dt className="text-sm font-medium text-gray-500 uppercase tracking-wider">In Progress</dt>
+                  <dt className="text-sm font-medium text-gray-500 truncate">In Progress</dt>
                   <dd className="text-lg font-semibold text-gray-900">{inProgressCount}</dd>
                 </dl>
               </div>
