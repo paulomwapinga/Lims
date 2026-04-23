@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
@@ -15,18 +15,17 @@ interface VisitTest {
   technician_notes: string | null;
   sent_to_doctor_at: string | null;
   created_at: string;
-  visit: {
-    id: string;
-    created_at: string;
-    doctor_id: string;
-    patient: {
-      id: string;
-      name: string;
-    };
-  };
-  test: {
-    name: string;
-  };
+  patient_id: string;
+  patient_name: string;
+  visit_created_at: string;
+  doctor_id: string;
+  test_name: string;
+}
+
+interface StatusCounts {
+  pending: number;
+  in_progress: number;
+  completed: number;
 }
 
 interface LabResultsProps {
@@ -42,96 +41,97 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>({ pending: 0, in_progress: 0, completed: 0 });
   const itemsPerPage = 20;
 
+  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
   useEffect(() => {
-    loadVisitTests();
-
-    const channel = supabase
-      .channel('visit_tests_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'visit_tests'
-        },
-        () => {
-          loadVisitTests();
-        }
-      )
-      .subscribe();
-
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
     return () => {
-      supabase.removeChannel(channel);
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
     };
+  }, [searchTerm]);
+
+  const loadStatusCounts = useCallback(async () => {
+    const { data } = await supabase.rpc('get_lab_results_status_counts');
+    if (data) {
+      const counts: StatusCounts = { pending: 0, in_progress: 0, completed: 0 };
+      for (const row of data as { results_status: string; count: number }[]) {
+        if (row.results_status === 'pending') counts.pending = Number(row.count);
+        else if (row.results_status === 'in_progress') counts.in_progress = Number(row.count);
+        else if (row.results_status === 'completed') counts.completed = Number(row.count);
+      }
+      setStatusCounts(counts);
+    }
   }, []);
 
-  useEffect(() => {
-    if (refreshTrigger && refreshTrigger > 0) {
-      loadVisitTests();
-    }
-  }, [refreshTrigger]);
-
-  const loadVisitTests = async () => {
+  const loadVisitTests = useCallback(async () => {
+    setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('visit_tests')
-        .select(`
-          id,
-          visit_id,
-          test_id,
-          results_status,
-          results_entered_at,
-          technician_notes,
-          sent_to_doctor_at,
-          created_at,
-          visit:visits (
-            id,
-            created_at,
-            doctor_id,
-            patient:patients (
-              id,
-              name
-            )
-          ),
-          test:tests (
-            name
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(10000);
+      const offset = (currentPage - 1) * itemsPerPage;
+
+      const [{ data: rows, error }, { data: countData, error: countError }] = await Promise.all([
+        supabase.rpc('get_lab_results_paginated', {
+          p_search: debouncedSearch,
+          p_status: statusFilter,
+          p_limit: itemsPerPage,
+          p_offset: offset,
+        }),
+        supabase.rpc('get_lab_results_count', {
+          p_search: debouncedSearch,
+          p_status: statusFilter,
+        }),
+      ]);
 
       if (error) throw error;
-      setVisitTests(data as any || []);
+      if (countError) throw countError;
+
+      setVisitTests((rows as VisitTest[]) || []);
+      setTotalItems(Number(countData) || 0);
     } catch (error) {
       console.error('Error loading visit tests:', error);
       alert('Failed to load tests');
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentPage, debouncedSearch, statusFilter]);
 
-  const filteredTests = visitTests.filter(vt => {
-    const matchesSearch =
-      vt.visit.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.visit.patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.visit.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      vt.test.name.toLowerCase().includes(searchTerm.toLowerCase());
+  useEffect(() => {
+    loadVisitTests();
+    loadStatusCounts();
+  }, [loadVisitTests, loadStatusCounts]);
 
-    const matchesStatus = statusFilter === 'all' || vt.results_status === statusFilter;
+  useEffect(() => {
+    const channel = supabase
+      .channel('visit_tests_changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'visit_tests' }, () => {
+        loadVisitTests();
+        loadStatusCounts();
+      })
+      .subscribe();
 
-    return matchesSearch && matchesStatus;
-  });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadVisitTests, loadStatusCounts]);
 
-  const totalItems = filteredTests.length;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedTests = filteredTests.slice(startIndex, endIndex);
+  useEffect(() => {
+    if (refreshTrigger && refreshTrigger > 0) {
+      loadVisitTests();
+      loadStatusCounts();
+    }
+  }, [refreshTrigger]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -161,37 +161,25 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
     }
   };
 
-  const handleEnterResults = (visitTestId: string) => {
-    if (onEnterResults) {
-      onEnterResults(visitTestId);
-    }
-  };
-
-  const handleViewResults = (visitTestId: string) => {
-    if (onViewResults) {
-      onViewResults(visitTestId);
-    }
-  };
-
-  const handleSendToDoctor = async (visitTest: VisitTest) => {
+  const handleSendToDoctor = async (vt: VisitTest) => {
     try {
       const now = getCurrentDateTime();
 
       const { error: updateError } = await supabase
         .from('visit_tests')
         .update({ sent_to_doctor_at: now })
-        .eq('id', visitTest.id);
+        .eq('id', vt.id);
 
       if (updateError) throw updateError;
 
       const { error: notifError } = await supabase
         .from('notifications')
         .insert({
-          user_id: visitTest.visit.doctor_id,
+          user_id: vt.doctor_id,
           type: 'lab_result_ready',
           title: 'Lab Results Ready',
-          message: `Lab results for ${visitTest.test.name} are ready for patient ${visitTest.visit.patient.name}`,
-          related_visit_test_id: visitTest.id
+          message: `Lab results for ${vt.test_name} are ready for patient ${vt.patient_name}`,
+          related_visit_test_id: vt.id,
         });
 
       if (notifError) throw notifError;
@@ -204,35 +192,29 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
     }
   };
 
-  const handleDeleteResults = async (visitTest: VisitTest) => {
+  const handleDeleteResults = async (vt: VisitTest) => {
     if (!profile || profile.role !== 'admin') {
       alert('Only administrators can delete lab results');
       return;
     }
 
-    const isPending = visitTest.results_status === 'pending';
+    const isPending = vt.results_status === 'pending';
     const message = isPending
-      ? `Are you sure you want to delete this test order for ${visitTest.test.name}?\n\nPatient: ${visitTest.visit.patient.name}\nThis will remove the entire test request.\n\nThis action cannot be undone.`
-      : `Are you sure you want to delete the lab results for ${visitTest.test.name}?\n\nPatient: ${visitTest.visit.patient.name}\nThis will reset the test to pending status.\n\nThis action cannot be undone.`;
+      ? `Are you sure you want to delete this test order for ${vt.test_name}?\n\nPatient: ${vt.patient_name}\nThis will remove the entire test request.\n\nThis action cannot be undone.`
+      : `Are you sure you want to delete the lab results for ${vt.test_name}?\n\nPatient: ${vt.patient_name}\nThis will reset the test to pending status.\n\nThis action cannot be undone.`;
 
-    const confirmDelete = confirm(message);
-    if (!confirmDelete) return;
+    if (!confirm(message)) return;
 
     try {
       if (isPending) {
-        const { error } = await supabase
-          .from('visit_tests')
-          .delete()
-          .eq('id', visitTest.id);
-
+        const { error } = await supabase.from('visit_tests').delete().eq('id', vt.id);
         if (error) throw error;
         alert('Test order deleted successfully');
       } else {
         const { error: deleteError } = await supabase
           .from('visit_test_results')
           .delete()
-          .eq('visit_test_id', visitTest.id);
-
+          .eq('visit_test_id', vt.id);
         if (deleteError) throw deleteError;
 
         const { error: updateError } = await supabase
@@ -244,24 +226,20 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
             technician_notes: null,
             sent_to_doctor_at: null,
           })
-          .eq('id', visitTest.id);
-
+          .eq('id', vt.id);
         if (updateError) throw updateError;
         alert('Lab results deleted successfully');
       }
 
       await loadVisitTests();
+      loadStatusCounts();
     } catch (error: any) {
       console.error('Error deleting:', error);
       alert(`Failed to delete: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const pendingCount = visitTests.filter(vt => vt.results_status === 'pending').length;
-  const inProgressCount = visitTests.filter(vt => vt.results_status === 'in_progress').length;
-  const completedCount = visitTests.filter(vt => vt.results_status === 'completed').length;
-
-  if (loading) {
+  if (loading && visitTests.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-gray-500">Loading...</div>
@@ -290,7 +268,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Pending</dt>
-                  <dd className="text-lg font-semibold text-gray-900">{pendingCount}</dd>
+                  <dd className="text-lg font-semibold text-gray-900">{statusCounts.pending}</dd>
                 </dl>
               </div>
             </div>
@@ -306,7 +284,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">In Progress</dt>
-                  <dd className="text-lg font-semibold text-gray-900">{inProgressCount}</dd>
+                  <dd className="text-lg font-semibold text-gray-900">{statusCounts.in_progress}</dd>
                 </dl>
               </div>
             </div>
@@ -322,7 +300,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
               <div className="ml-5 w-0 flex-1">
                 <dl>
                   <dt className="text-sm font-medium text-gray-500 truncate">Completed</dt>
-                  <dd className="text-lg font-semibold text-gray-900">{completedCount}</dd>
+                  <dd className="text-lg font-semibold text-gray-900">{statusCounts.completed}</dd>
                 </dl>
               </div>
             </div>
@@ -365,53 +343,37 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Patient
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visit
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Test
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date Ordered
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Sent to Doctor
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visit</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Test</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Ordered</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Sent to Doctor</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredTests.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No tests found
-                  </td>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">Loading...</td>
+                </tr>
+              ) : visitTests.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">No tests found</td>
                 </tr>
               ) : (
-                paginatedTests.map((vt) => (
+                visitTests.map((vt) => (
                   <tr key={vt.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {vt.visit.patient.name}
-                      </div>
-                      <div className="text-sm text-gray-500">ID: {vt.visit.patient.id.slice(0, 8)}</div>
+                      <div className="text-sm font-medium text-gray-900">{vt.patient_name}</div>
+                      <div className="text-sm text-gray-500">ID: {vt.patient_id.slice(0, 8)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>
-                      <div className="text-sm text-gray-500">
-                        {formatDate(vt.visit.created_at)}
-                      </div>
+                      <div className="text-sm text-gray-900">#{vt.visit_id.slice(0, 8)}</div>
+                      <div className="text-sm text-gray-500">{formatDate(vt.visit_created_at)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{vt.test.name}</div>
+                      <div className="text-sm font-medium text-gray-900">{vt.test_name}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {formatDate(vt.created_at)}
@@ -426,9 +388,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                             <Send className="w-3 h-3 mr-1" />
                             Sent
                           </span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {formatDateTime(vt.sent_to_doctor_at)}
-                          </div>
+                          <div className="text-xs text-gray-500 mt-1">{formatDateTime(vt.sent_to_doctor_at)}</div>
                         </div>
                       ) : vt.results_status === 'completed' ? (
                         <div className="flex items-center gap-2">
@@ -453,14 +413,14 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                         {vt.results_status === 'completed' ? (
                           <>
                             <button
-                              onClick={() => handleViewResults(vt.id)}
+                              onClick={() => onViewResults?.(vt.id)}
                               className="text-blue-600 hover:text-blue-900 inline-flex items-center"
                             >
                               <Eye className="w-4 h-4 mr-1" />
                               View
                             </button>
                             <button
-                              onClick={() => handleEnterResults(vt.id)}
+                              onClick={() => onEnterResults?.(vt.id)}
                               className="text-gray-600 hover:text-gray-900 inline-flex items-center"
                             >
                               <Edit className="w-4 h-4 mr-1" />
@@ -479,7 +439,7 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                         ) : (
                           <>
                             <button
-                              onClick={() => handleEnterResults(vt.id)}
+                              onClick={() => onEnterResults?.(vt.id)}
                               className="text-blue-600 hover:text-blue-900 inline-flex items-center"
                             >
                               <FlaskConical className="w-4 h-4 mr-1" />
