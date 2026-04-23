@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatDate, formatDateTime } from '../lib/dateFormat';
 import { getCurrentDateTime } from '../lib/timezone';
-import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2, MessageSquare, FileText, Stethoscope, X } from 'lucide-react';
+import { FlaskConical, Search, Filter, CheckCircle, Clock, AlertCircle, Eye, CreditCard as Edit, Send, Trash2 } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface VisitTest {
@@ -14,18 +14,14 @@ interface VisitTest {
   results_entered_at: string | null;
   technician_notes: string | null;
   sent_to_doctor_at: string | null;
-  sms_sent_at: string | null;
   created_at: string;
   visit: {
     id: string;
     created_at: string;
     doctor_id: string;
-    notes: string | null;
-    diagnosis: string | null;
     patient: {
       id: string;
       name: string;
-      phone: string | null;
     };
   };
   test: {
@@ -44,19 +40,12 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   const [visitTests, setVisitTests] = useState<VisitTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [searchInput, setSearchInput] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [statusCounts, setStatusCounts] = useState({ pending: 0, in_progress: 0, completed: 0 });
-  const [sendingSmsFor, setSendingSmsFor] = useState<string | null>(null);
-  const [showComplaintModal, setShowComplaintModal] = useState(false);
-  const [selectedComplaint, setSelectedComplaint] = useState('');
   const itemsPerPage = 20;
 
   useEffect(() => {
     loadVisitTests();
-    loadStatusCounts();
 
     const channel = supabase
       .channel('visit_tests_changes')
@@ -69,7 +58,6 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         },
         () => {
           loadVisitTests();
-          loadStatusCounts();
         }
       )
       .subscribe();
@@ -82,78 +70,40 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
   useEffect(() => {
     if (refreshTrigger && refreshTrigger > 0) {
       loadVisitTests();
-      loadStatusCounts();
     }
   }, [refreshTrigger]);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
-
-  useEffect(() => {
-    loadVisitTests();
-  }, [currentPage, searchTerm, statusFilter]);
-
-  const loadStatusCounts = async () => {
-    const isDoctor = profile?.role === 'doctor';
-
-    const [pendingRes, inProgressRes, completedRes] = await Promise.all([
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'pending'),
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'in_progress'),
-      supabase.from('visit_tests').select('*', { count: 'exact', head: true }).eq('results_status', 'completed'),
-    ]);
-    setStatusCounts({
-      pending: pendingRes.count || 0,
-      in_progress: inProgressRes.count || 0,
-      completed: completedRes.count || 0,
-    });
-  };
-
   const loadVisitTests = async () => {
     try {
-      const offset = (currentPage - 1) * itemsPerPage;
-
-      const { data, error } = await supabase.rpc('search_visit_tests', {
-        search_term: searchTerm,
-        status_filter: statusFilter,
-        page_offset: offset,
-        page_limit: itemsPerPage,
-      });
+      const { data, error } = await supabase
+        .from('visit_tests')
+        .select(`
+          id,
+          visit_id,
+          test_id,
+          results_status,
+          results_entered_at,
+          technician_notes,
+          sent_to_doctor_at,
+          created_at,
+          visit:visits (
+            id,
+            created_at,
+            doctor_id,
+            patient:patients (
+              id,
+              name
+            )
+          ),
+          test:tests (
+            name
+          )
+        `)
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (error) throw error;
-
-      const rows = (data as any[]) || [];
-      const totalCount = rows.length > 0 ? Number(rows[0].total_count) : 0;
-
-      const results: VisitTest[] = rows.map((row: any) => ({
-        id: row.id,
-        visit_id: row.visit_id,
-        test_id: row.test_id,
-        results_status: row.results_status,
-        results_entered_at: row.results_entered_at,
-        technician_notes: row.technician_notes,
-        sent_to_doctor_at: row.sent_to_doctor_at,
-        sms_sent_at: row.sms_sent_at,
-        created_at: row.created_at,
-        visit: {
-          id: row.visit_id,
-          created_at: row.visit_created_at,
-          doctor_id: row.visit_doctor_id,
-          notes: row.visit_notes,
-          diagnosis: row.visit_diagnosis,
-          patient: {
-            id: row.patient_id,
-            name: row.patient_name,
-            phone: row.patient_phone,
-          },
-        },
-        test: {
-          name: row.test_name,
-        },
-      }));
-
-      setVisitTests(results);
-      setTotalItems(totalCount);
+      setVisitTests(data as any || []);
     } catch (error) {
       console.error('Error loading visit tests:', error);
       alert('Failed to load tests');
@@ -162,14 +112,26 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
     }
   };
 
-  const paginatedTests = visitTests;
+  const filteredTests = visitTests.filter(vt => {
+    const matchesSearch =
+      vt.visit.patient.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.visit.patient.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.visit.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      vt.test.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = statusFilter === 'all' || vt.results_status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalItems = filteredTests.length;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedTests = filteredTests.slice(startIndex, endIndex);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearchTerm(searchInput);
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -234,93 +196,11 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
 
       if (notifError) throw notifError;
 
-      await Promise.all([loadVisitTests(), loadStatusCounts()]);
+      await loadVisitTests();
       alert('Results sent to doctor successfully');
     } catch (error) {
       console.error('Error sending results to doctor:', error);
       alert('Failed to send results to doctor');
-    }
-  };
-
-  const handleSendSMS = async (visitTest: VisitTest) => {
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'doctor' && profile.role !== 'lab_tech')) {
-      alert('Only administrators, doctors, and lab technicians can send SMS');
-      return;
-    }
-
-    if (!visitTest.visit.patient.phone) {
-      alert('Patient has no phone number');
-      return;
-    }
-
-    try {
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('key, value')
-        .in('key', ['sms_completion_message']);
-
-      const settingsMap: Record<string, string> = {};
-      if (settings) {
-        settings.forEach((s: any) => {
-          settingsMap[s.key] = s.value;
-        });
-      }
-
-      const messageTemplate = settingsMap.sms_completion_message || 'Hello {patient_name}, your test results are ready. Please visit the clinic.';
-      const previewMessage = messageTemplate.replace(/{patient_name}/g, visitTest.visit.patient.name);
-
-      const confirmSend = confirm(
-        `Send SMS to ${visitTest.visit.patient.name}?\n\nPhone: ${visitTest.visit.patient.phone}\n\nMessage: "${previewMessage}"`
-      );
-      if (!confirmSend) return;
-
-      setSendingSmsFor(visitTest.id);
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        throw new Error('No active session');
-      }
-
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-lab-result-sms`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          visit_test_id: visitTest.id,
-          recipient_type: 'patient',
-        }),
-      });
-
-      let result;
-      try {
-        result = await response.json();
-      } catch (jsonError) {
-        console.error('Failed to parse JSON response:', jsonError);
-        const text = await response.text();
-        console.error('Raw response:', text);
-        throw new Error(`Server error: ${response.status} - ${text.substring(0, 100)}`);
-      }
-
-      console.log('SMS Response:', { status: response.status, result });
-
-      if (!response.ok || !result.success) {
-        const errorMsg = result.error || result.message || 'Failed to send SMS';
-        console.error('SMS API Error:', errorMsg);
-        throw new Error(errorMsg);
-      }
-
-      alert('SMS sent successfully!');
-      await Promise.all([loadVisitTests(), loadStatusCounts()]);
-    } catch (error: any) {
-      console.error('Error sending SMS (full):', error);
-      const errorMessage = error.message || 'Unknown error';
-      console.error('Error message:', errorMessage);
-      alert(`Failed to send SMS: ${errorMessage}`);
-    } finally {
-      setSendingSmsFor(null);
     }
   };
 
@@ -370,16 +250,16 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
         alert('Lab results deleted successfully');
       }
 
-      await Promise.all([loadVisitTests(), loadStatusCounts()]);
+      await loadVisitTests();
     } catch (error: any) {
       console.error('Error deleting:', error);
       alert(`Failed to delete: ${error.message || 'Unknown error'}`);
     }
   };
 
-  const pendingCount = statusCounts.pending;
-  const inProgressCount = statusCounts.in_progress;
-  const completedCount = statusCounts.completed;
+  const pendingCount = visitTests.filter(vt => vt.results_status === 'pending').length;
+  const inProgressCount = visitTests.filter(vt => vt.results_status === 'in_progress').length;
+  const completedCount = visitTests.filter(vt => vt.results_status === 'completed').length;
 
   if (loading) {
     return (
@@ -461,8 +341,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                 type="text"
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 placeholder="Search by patient, visit number, or test name..."
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <div className="flex items-center gap-2">
@@ -492,9 +372,6 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                   Visit
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Complaint
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Test
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -507,31 +384,21 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                   Sent to Doctor
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SMS Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {visitTests.length === 0 ? (
+              {filteredTests.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
+                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
                     No tests found
                   </td>
                 </tr>
               ) : (
                 paginatedTests.map((vt) => (
-                  <tr
-                    key={vt.id}
-                    className={`
-                      ${vt.results_status === 'completed' ? 'bg-green-50 hover:bg-green-100' : ''}
-                      ${vt.results_status === 'pending' ? 'bg-yellow-50 hover:bg-yellow-100' : ''}
-                      ${vt.results_status === 'in_progress' ? 'bg-blue-50 hover:bg-blue-100' : ''}
-                    `}
-                  >
-                    <td className="px-6 py-4">
+                  <tr key={vt.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {vt.visit.patient.name}
                       </div>
@@ -540,25 +407,8 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">#{vt.visit.id.slice(0, 8)}</div>
                       <div className="text-sm text-gray-500">
-                        {formatDateTime(vt.visit.created_at)}
+                        {formatDate(vt.visit.created_at)}
                       </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {vt.visit.notes ? (
-                        <button
-                          onClick={() => {
-                            setSelectedComplaint(vt.visit.notes);
-                            setShowComplaintModal(true);
-                          }}
-                          className="text-blue-600 hover:text-blue-800 hover:bg-blue-50 p-2 rounded-lg transition-colors flex items-center gap-2"
-                          title="View complaint"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span className="text-sm font-medium">View</span>
-                        </button>
-                      ) : (
-                        <span className="text-sm text-gray-400">N/A</span>
-                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">{vt.test.name}</div>
@@ -598,31 +448,6 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                         <span className="text-xs text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {vt.sms_sent_at ? (
-                        <div>
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                            <MessageSquare className="w-3 h-3 mr-1" />
-                            SMS Sent
-                          </span>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {formatDateTime(vt.sms_sent_at)}
-                          </div>
-                        </div>
-                      ) : vt.results_status === 'completed' && (profile?.role === 'admin' || profile?.role === 'doctor' || profile?.role === 'lab_tech') && vt.visit.patient.phone ? (
-                        <button
-                          onClick={() => handleSendSMS(vt)}
-                          disabled={sendingSmsFor === vt.id}
-                          className="inline-flex items-center px-2.5 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                          title="Send SMS to patient"
-                        >
-                          <MessageSquare className="w-3 h-3 mr-1" />
-                          {sendingSmsFor === vt.id ? 'Sending...' : 'Send SMS'}
-                        </button>
-                      ) : (
-                        <span className="text-xs text-gray-400">-</span>
-                      )}
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex gap-2">
                         {vt.results_status === 'completed' ? (
@@ -634,15 +459,13 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                               <Eye className="w-4 h-4 mr-1" />
                               View
                             </button>
-                            {(profile?.role === 'admin' || profile?.role === 'lab_tech') && (
-                              <button
-                                onClick={() => handleEnterResults(vt.id)}
-                                className="text-gray-600 hover:text-gray-900 inline-flex items-center"
-                              >
-                                <Edit className="w-4 h-4 mr-1" />
-                                Edit
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleEnterResults(vt.id)}
+                              className="text-gray-600 hover:text-gray-900 inline-flex items-center"
+                            >
+                              <Edit className="w-4 h-4 mr-1" />
+                              Edit
+                            </button>
                             {profile?.role === 'admin' && (
                               <button
                                 onClick={() => handleDeleteResults(vt)}
@@ -655,15 +478,13 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
                           </>
                         ) : (
                           <>
-                            {(profile?.role === 'admin' || profile?.role === 'lab_tech') && (
-                              <button
-                                onClick={() => handleEnterResults(vt.id)}
-                                className="text-blue-600 hover:text-blue-900 inline-flex items-center"
-                              >
-                                <FlaskConical className="w-4 h-4 mr-1" />
-                                Enter Results
-                              </button>
-                            )}
+                            <button
+                              onClick={() => handleEnterResults(vt.id)}
+                              className="text-blue-600 hover:text-blue-900 inline-flex items-center"
+                            >
+                              <FlaskConical className="w-4 h-4 mr-1" />
+                              Enter Results
+                            </button>
                             {profile?.role === 'admin' && (
                               <button
                                 onClick={() => handleDeleteResults(vt)}
@@ -691,29 +512,6 @@ export default function LabResults({ onEnterResults, onViewResults, refreshTrigg
           onPageChange={setCurrentPage}
         />
       </div>
-
-      {showComplaintModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between bg-gradient-to-r from-blue-50 to-white">
-              <h2 className="text-xl font-bold text-gray-900">Patient Complaint</h2>
-              <button
-                onClick={() => setShowComplaintModal(false)}
-                className="text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-lg transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto max-h-[calc(90vh-80px)]">
-              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                  {selectedComplaint}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

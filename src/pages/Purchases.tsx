@@ -12,21 +12,11 @@ interface Purchase {
   purchase_date: string;
   total_amount: number;
   supplier: string;
-  supplier_id: string | null;
   notes: string;
   items_count: number;
   status: 'draft' | 'completed';
   completed_at: string | null;
   created_at: string;
-}
-
-interface Supplier {
-  id: string;
-  name: string;
-  contact_person: string | null;
-  phone: string | null;
-  email: string | null;
-  address: string | null;
 }
 
 interface PurchaseItemDetail {
@@ -70,7 +60,6 @@ export default function Purchases() {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
-  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -78,22 +67,14 @@ export default function Purchases() {
   const [selectedPurchaseItems, setSelectedPurchaseItems] = useState<PurchaseItemDetail[]>([]);
   const [dateFilter, setDateFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'completed'>('all');
-  const [supplierFilter, setSupplierFilter] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [purchaseItems, setPurchaseItems] = useState<PurchaseItem[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
-  const [saveNewSupplier, setSaveNewSupplier] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'complete' | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const [formData, setFormData] = useState({
     purchase_date: getTodayDateString(),
     supplier: '',
-    supplier_id: null as string | null,
     notes: '',
   });
 
@@ -104,34 +85,21 @@ export default function Purchases() {
     unit_price: '',
   });
 
-  const [previousPurchasePrice, setPreviousPurchasePrice] = useState<{
-    unit_price: number;
-    purchase_date: string;
-  } | null>(null);
-
   useEffect(() => {
     loadPurchases();
     loadItems();
     loadUnits();
-    loadSuppliers();
-  }, [dateFilter, statusFilter, supplierFilter]);
+  }, [dateFilter, statusFilter]);
 
   async function loadPurchases() {
     try {
       let query = supabase
         .from('purchases')
-        .select(`
-          id, purchase_date, total_amount, supplier, supplier_id, notes, status, completed_at, created_at,
-          purchase_items(id)
-        `)
+        .select('id, purchase_date, total_amount, supplier, notes, status, completed_at, created_at')
         .order('created_at', { ascending: false });
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
-      }
-
-      if (supplierFilter !== 'all') {
-        query = query.eq('supplier_id', supplierFilter);
       }
 
       if (dateFilter === 'today') {
@@ -150,18 +118,19 @@ export default function Purchases() {
 
       if (error) throw error;
 
-      const purchasesWithCounts = (purchasesData || []).map((purchase: any) => ({
-        id: purchase.id,
-        purchase_date: purchase.purchase_date,
-        total_amount: purchase.total_amount,
-        supplier: purchase.supplier,
-        supplier_id: purchase.supplier_id,
-        notes: purchase.notes,
-        status: purchase.status,
-        completed_at: purchase.completed_at,
-        created_at: purchase.created_at,
-        items_count: purchase.purchase_items?.length || 0,
-      }));
+      const purchasesWithCounts = await Promise.all(
+        (purchasesData || []).map(async (purchase) => {
+          const { count } = await supabase
+            .from('purchase_items')
+            .select('*', { count: 'exact', head: true })
+            .eq('purchase_id', purchase.id);
+
+          return {
+            ...purchase,
+            items_count: count || 0,
+          };
+        })
+      );
 
       setPurchases(purchasesWithCounts);
     } catch (error) {
@@ -176,8 +145,7 @@ export default function Purchases() {
       const { data, error } = await supabase
         .from('inventory_items')
         .select('*')
-        .order('name')
-        .limit(500);
+        .order('name');
 
       if (error) throw error;
       setItems(data || []);
@@ -197,51 +165,6 @@ export default function Purchases() {
       setUnits(data || []);
     } catch (error) {
       console.error('Error loading units:', error);
-    }
-  }
-
-  async function loadSuppliers() {
-    try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('*')
-        .order('name');
-
-      if (error) throw error;
-      setSuppliers(data || []);
-    } catch (error) {
-      console.error('Error loading suppliers:', error);
-    }
-  }
-
-  async function loadPreviousPurchasePrice(itemId: string) {
-    try {
-      const { data, error } = await supabase
-        .from('purchase_items')
-        .select(`
-          unit_price,
-          purchase:purchases!inner (
-            purchase_date
-          )
-        `)
-        .eq('item_id', itemId)
-        .order('purchase(purchase_date)', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error) throw error;
-
-      if (data) {
-        setPreviousPurchasePrice({
-          unit_price: data.unit_price,
-          purchase_date: (data.purchase as any).purchase_date,
-        });
-      } else {
-        setPreviousPurchasePrice(null);
-      }
-    } catch (error) {
-      console.error('Error loading previous purchase price:', error);
-      setPreviousPurchasePrice(null);
     }
   }
 
@@ -280,7 +203,6 @@ export default function Purchases() {
     ]);
 
     setItemForm({ item_id: '', quantity: '', unit: '', unit_price: '' });
-    setPreviousPurchasePrice(null);
     setSearchTerm('');
   }
 
@@ -288,7 +210,7 @@ export default function Purchases() {
     setPurchaseItems(purchaseItems.filter((_, i) => i !== index));
   }
 
-  function handleSubmit(saveAsDraft: boolean = false) {
+  async function handleSubmit(saveAsDraft: boolean = false) {
     if (!user) {
       alert('You must be logged in to add purchases');
       return;
@@ -304,52 +226,7 @@ export default function Purchases() {
       return;
     }
 
-    if (!saveAsDraft) {
-      setConfirmAction('complete');
-      setShowConfirmDialog(true);
-    } else {
-      completePurchase(true);
-    }
-  }
-
-  async function completePurchase(saveAsDraft: boolean = false) {
-    if (!user) return;
-
-    setShowConfirmDialog(false);
-    setConfirmAction(null);
-    setSaving(true);
-
     try {
-      let supplierId = formData.supplier_id;
-
-      if (saveNewSupplier && !formData.supplier_id && formData.supplier.trim()) {
-        const { data: existingSupplier } = await supabase
-          .from('suppliers')
-          .select('id')
-          .eq('name', formData.supplier.trim())
-          .maybeSingle();
-
-        if (existingSupplier) {
-          supplierId = existingSupplier.id;
-        } else {
-          const { data: newSupplier, error: supplierError } = await supabase
-            .from('suppliers')
-            .insert({
-              name: formData.supplier.trim(),
-              created_by: user.id,
-            })
-            .select()
-            .single();
-
-          if (supplierError) {
-            console.error('Error saving supplier:', supplierError);
-          } else if (newSupplier) {
-            supplierId = newSupplier.id;
-            setSuppliers([...suppliers, newSupplier]);
-          }
-        }
-      }
-
       const grandTotal = calculateGrandTotal();
       const status = saveAsDraft ? 'draft' : 'completed';
       const completedAt = saveAsDraft ? null : getCurrentDateTime();
@@ -360,7 +237,6 @@ export default function Purchases() {
           purchase_date: formData.purchase_date,
           total_amount: grandTotal,
           supplier: formData.supplier,
-          supplier_id: supplierId,
           notes: formData.notes,
           status,
           completed_at: completedAt,
@@ -386,21 +262,28 @@ export default function Purchases() {
 
       if (itemsError) throw itemsError;
 
-      const newPurchaseWithCount = {
-        ...purchaseData,
-        items_count: purchaseItems.length,
-      };
-      setPurchases([newPurchaseWithCount, ...purchases]);
+      if (!saveAsDraft) {
+        for (const purchaseItem of purchaseItems) {
+          const item = items.find((i) => i.id === purchaseItem.item_id);
+          if (item) {
+            const newQty = item.qty_on_hand + purchaseItem.quantity;
+            const { error: updateError } = await supabase
+              .from('inventory_items')
+              .update({ qty_on_hand: newQty })
+              .eq('id', purchaseItem.item_id);
+
+            if (updateError) throw updateError;
+          }
+        }
+      }
 
       alert(saveAsDraft ? 'Purchase saved as draft!' : 'Purchase completed successfully!');
       closeDialog();
-      loadItems();
+      loadPurchases();
       loadItems();
     } catch (error) {
       console.error('Error saving purchase:', error);
       alert('Failed to save purchase');
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -449,6 +332,26 @@ export default function Purchases() {
     if (!confirm(`Complete this draft purchase from ${purchase.supplier}?`)) return;
 
     try {
+      const { data: purchaseItemsData, error: fetchError } = await supabase
+        .from('purchase_items')
+        .select('item_id, quantity')
+        .eq('purchase_id', purchase.id);
+
+      if (fetchError) throw fetchError;
+
+      for (const purchaseItem of purchaseItemsData || []) {
+        const item = items.find((i) => i.id === purchaseItem.item_id);
+        if (item) {
+          const newQty = item.qty_on_hand + purchaseItem.quantity;
+          const { error: updateError } = await supabase
+            .from('inventory_items')
+            .update({ qty_on_hand: newQty })
+            .eq('id', purchaseItem.item_id);
+
+          if (updateError) throw updateError;
+        }
+      }
+
       const { error: updateError } = await supabase
         .from('purchases')
         .update({
@@ -473,25 +376,39 @@ export default function Purchases() {
     if (!confirm(`Delete this purchase from ${purchase.supplier}?`)) return;
 
     try {
-      const { data, error } = await supabase
-        .rpc('delete_purchase', { p_purchase_id: purchase.id });
+      const { data: purchaseItemsData, error: fetchError } = await supabase
+        .from('purchase_items')
+        .select('item_id, quantity')
+        .eq('purchase_id', purchase.id);
 
-      if (error) {
-        console.error('Error deleting purchase:', error);
-        alert(`Failed to delete purchase: ${error.message}`);
-        return;
+      if (fetchError) throw fetchError;
+
+      if (purchase.status === 'completed') {
+        for (const purchaseItem of purchaseItemsData || []) {
+          const item = items.find((i) => i.id === purchaseItem.item_id);
+          if (item) {
+            const newQty = item.qty_on_hand - purchaseItem.quantity;
+            const { error: updateError } = await supabase
+              .from('inventory_items')
+              .update({ qty_on_hand: newQty })
+              .eq('id', purchaseItem.item_id);
+
+            if (updateError) throw updateError;
+          }
+        }
       }
 
-      if (data && !data.success) {
-        alert(`Failed to delete purchase: ${data.error}`);
-        return;
-      }
+      const { error: deleteError } = await supabase
+        .from('purchases')
+        .delete()
+        .eq('id', purchase.id);
 
-      alert('Purchase deleted successfully');
+      if (deleteError) throw deleteError;
+
       loadPurchases();
       loadItems();
     } catch (error) {
-      console.error('Error in delete operation:', error);
+      console.error('Error deleting purchase:', error);
       alert('Failed to delete purchase');
     }
   }
@@ -500,7 +417,6 @@ export default function Purchases() {
     setFormData({
       purchase_date: formatDateTimeForInput(new Date()),
       supplier: '',
-      supplier_id: null,
       notes: '',
     });
     setItemForm({
@@ -511,15 +427,11 @@ export default function Purchases() {
     });
     setPurchaseItems([]);
     setSearchTerm('');
-    setSupplierSearch('');
-    setShowSupplierDropdown(false);
-    setSaveNewSupplier(false);
     setShowDialog(true);
   }
 
   function closeDialog() {
     setShowDialog(false);
-    setPreviousPurchasePrice(null);
   }
 
   function calculateItemTotal() {
@@ -541,7 +453,7 @@ export default function Purchases() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [dateFilter, statusFilter, supplierFilter]);
+  }, [dateFilter, statusFilter]);
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
@@ -596,56 +508,24 @@ export default function Purchases() {
           </button>
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center space-x-4">
-              <Calendar className="w-5 h-5 text-gray-500" />
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Time</option>
-                <option value="today">Today</option>
-                <option value="week">Last 7 Days</option>
-                <option value="month">Last 30 Days</option>
-              </select>
-              <ShoppingCart className="w-5 h-5 text-gray-500" />
-              <select
-                value={supplierFilter}
-                onChange={(e) => setSupplierFilter(e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              >
-                <option value="all">All Suppliers</option>
-                {suppliers.map((supplier) => (
-                  <option key={supplier.id} value={supplier.id}>
-                    {supplier.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Total Purchase Amount</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPurchaseAmount)}</p>
-            </div>
+        <div className="flex items-center justify-between bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center space-x-4">
+            <Calendar className="w-5 h-5 text-gray-500" />
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="all">All Time</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+            </select>
           </div>
-          {supplierFilter !== 'all' && (
-            <div className="flex items-center space-x-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-              <ShoppingCart className="w-4 h-4 text-blue-600" />
-              <span className="text-sm text-blue-700">
-                Showing purchases from:{' '}
-                <span className="font-semibold">
-                  {suppliers.find((s) => s.id === supplierFilter)?.name}
-                </span>
-              </span>
-              <button
-                onClick={() => setSupplierFilter('all')}
-                className="ml-auto text-blue-700 hover:text-blue-900"
-              >
-                <span className="text-lg">&times;</span>
-              </button>
-            </div>
-          )}
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Total Purchase Amount</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalPurchaseAmount)}</p>
+          </div>
         </div>
       </div>
 
@@ -892,108 +772,17 @@ export default function Purchases() {
                   />
                 </div>
 
-                <div className="relative">
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier <span className="text-red-500">*</span>
                   </label>
                   <input
                     type="text"
                     value={formData.supplier}
-                    onChange={(e) => {
-                      setFormData({ ...formData, supplier: e.target.value, supplier_id: null });
-                      setSupplierSearch(e.target.value);
-                      setShowSupplierDropdown(true);
-                      setSaveNewSupplier(false);
-                    }}
-                    onFocus={() => setShowSupplierDropdown(true)}
-                    placeholder="Type to search or enter new supplier"
+                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+                    placeholder="Supplier name"
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  {showSupplierDropdown && formData.supplier && (
-                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                      {suppliers
-                        .filter((s) =>
-                          s.name.toLowerCase().includes(formData.supplier.toLowerCase())
-                        )
-                        .map((supplier) => (
-                          <div
-                            key={supplier.id}
-                            onClick={() => {
-                              setFormData({
-                                ...formData,
-                                supplier: supplier.name,
-                                supplier_id: supplier.id,
-                              });
-                              setShowSupplierDropdown(false);
-                              setSaveNewSupplier(false);
-                            }}
-                            className="px-4 py-2 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0"
-                          >
-                            <div className="font-medium text-gray-900">{supplier.name}</div>
-                            {supplier.contact_person && (
-                              <div className="text-xs text-gray-500">Contact: {supplier.contact_person}</div>
-                            )}
-                            {supplier.phone && (
-                              <div className="text-xs text-gray-500">Phone: {supplier.phone}</div>
-                            )}
-                          </div>
-                        ))}
-                      {!formData.supplier_id &&
-                        formData.supplier.trim() &&
-                        !suppliers.some(
-                          (s) => s.name.toLowerCase() === formData.supplier.toLowerCase()
-                        ) && (
-                          <div
-                            onClick={() => {
-                              setSaveNewSupplier(true);
-                              setShowSupplierDropdown(false);
-                            }}
-                            className="px-4 py-2 hover:bg-green-50 cursor-pointer border-t-2 border-green-200 bg-green-50"
-                          >
-                            <div className="font-medium text-green-700 flex items-center">
-                              <Plus className="w-4 h-4 mr-2" />
-                              Save "{formData.supplier}" as new supplier
-                            </div>
-                            <div className="text-xs text-green-600 mt-1">
-                              This will save the supplier for future use
-                            </div>
-                          </div>
-                        )}
-                    </div>
-                  )}
-                  {saveNewSupplier && (
-                    <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center text-sm text-green-700">
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Will save "{formData.supplier}" as new supplier
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSaveNewSupplier(false)}
-                        className="text-green-700 hover:text-green-900"
-                      >
-                        <span className="text-lg">&times;</span>
-                      </button>
-                    </div>
-                  )}
-                  {formData.supplier_id && (
-                    <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-between">
-                      <div className="flex items-center text-sm text-blue-700">
-                        <CheckCircle className="w-4 h-4 mr-2" />
-                        Using saved supplier
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setFormData({ ...formData, supplier: '', supplier_id: null });
-                          setSaveNewSupplier(false);
-                        }}
-                        className="text-blue-700 hover:text-blue-900"
-                      >
-                        <span className="text-lg">&times;</span>
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -1047,9 +836,9 @@ export default function Purchases() {
                             .replace(/[^a-z]/g, '');
 
                           const unitMappings: { [key: string]: string } = {
-                            'amp': 'amp',
-                            'ampoule': 'amp',
-                            'ampule': 'amp',
+                            'amp': 'vial',
+                            'ampoule': 'vial',
+                            'ampule': 'vial',
                             'pac': 'pack',
                             'pkt': 'pack',
                             'pack': 'pack',
@@ -1067,22 +856,22 @@ export default function Purchases() {
                             'sachet': 'sachet',
                             'syringe': 'syringe',
                             'ml': 'ml',
-                            'mls': 'mls',
                             'pc': 'pc',
                             'piece': 'pc',
                             'inhaler': 'inhaler',
                             'drops': 'drops',
                           };
 
-                          const normalizedUnit = unitMappings[itemUnit] || itemUnit;
+                          matchedUnit = unitMappings[itemUnit] || '';
 
-                          const matchedUnitObj = units.find(u =>
-                            u.name.toLowerCase() === normalizedUnit ||
-                            normalizedUnit.includes(u.name.toLowerCase()) ||
-                            u.name.toLowerCase().includes(normalizedUnit)
-                          );
-
-                          matchedUnit = matchedUnitObj?.name || '';
+                          if (!matchedUnit) {
+                            const matchedUnitObj = units.find(u =>
+                              u.name.toLowerCase() === itemUnit ||
+                              itemUnit.includes(u.name.toLowerCase()) ||
+                              u.name.toLowerCase().includes(itemUnit)
+                            );
+                            matchedUnit = matchedUnitObj?.name || '';
+                          }
                         }
 
                         setItemForm({
@@ -1090,12 +879,6 @@ export default function Purchases() {
                           item_id: e.target.value,
                           unit: matchedUnit
                         });
-
-                        if (e.target.value) {
-                          loadPreviousPurchasePrice(e.target.value);
-                        } else {
-                          setPreviousPurchasePrice(null);
-                        }
                       }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
@@ -1107,7 +890,7 @@ export default function Purchases() {
                           )
                           .map((item) => (
                             <option key={item.id} value={item.id}>
-                              {item.name} ({item.unit}) - Stock: {item.qty_on_hand} - {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
+                              {item.name} ({item.unit}) - {item.type === 'medicine' ? 'Medicine' : 'Lab Consumable'}
                             </option>
                           ))
                       ) : (
@@ -1117,7 +900,7 @@ export default function Purchases() {
                               .filter((item) => item.type === 'medicine')
                               .map((item) => (
                                 <option key={item.id} value={item.id}>
-                                  {item.name} ({item.unit}) - Stock: {item.qty_on_hand}
+                                  {item.name} ({item.unit})
                                 </option>
                               ))}
                           </optgroup>
@@ -1126,21 +909,13 @@ export default function Purchases() {
                               .filter((item) => item.type === 'lab_consumable')
                               .map((item) => (
                                 <option key={item.id} value={item.id}>
-                                  {item.name} ({item.unit}) - Stock: {item.qty_on_hand}
+                                  {item.name} ({item.unit})
                                 </option>
                               ))}
                           </optgroup>
                         </>
                       )}
                     </select>
-                    {itemForm.item_id && (
-                      <div className="mt-2 text-sm">
-                        <span className="text-gray-600">Current stock: </span>
-                        <span className="font-semibold text-blue-600">
-                          {items.find(i => i.id === itemForm.item_id)?.qty_on_hand || 0} {items.find(i => i.id === itemForm.item_id)?.unit}
-                        </span>
-                      </div>
-                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-4 mb-4">
@@ -1193,12 +968,6 @@ export default function Purchases() {
                         placeholder="Price per unit"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      {previousPurchasePrice && (
-                        <p className="text-xs text-gray-600 mt-1">
-                          Last purchased at {formatCurrency(previousPurchasePrice.unit_price)} on{' '}
-                          {formatDate(previousPurchasePrice.purchase_date)}
-                        </p>
-                      )}
                     </div>
 
                     <div>
@@ -1281,86 +1050,29 @@ export default function Purchases() {
                   <button
                     type="button"
                     onClick={() => handleSubmit(true)}
-                    disabled={purchaseItems.length === 0 || saving}
+                    disabled={purchaseItems.length === 0}
                     className={`px-4 py-2 rounded-lg ${
-                      purchaseItems.length === 0 || saving
+                      purchaseItems.length === 0
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-yellow-600 text-white hover:bg-yellow-700'
                     }`}
                   >
-                    {saving ? 'Saving...' : 'Save as Draft'}
+                    Save as Draft
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSubmit(false)}
-                    disabled={purchaseItems.length === 0 || saving}
+                    disabled={purchaseItems.length === 0}
                     className={`px-4 py-2 rounded-lg ${
-                      purchaseItems.length === 0 || saving
+                      purchaseItems.length === 0
                         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                         : 'bg-green-600 text-white hover:bg-green-700'
                     }`}
                   >
-                    {saving ? 'Processing...' : `Complete Purchase (${purchaseItems.length} item${purchaseItems.length !== 1 ? 's' : ''})`}
+                    Complete Purchase ({purchaseItems.length} item{purchaseItems.length !== 1 ? 's' : ''})
                   </button>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showConfirmDialog && confirmAction === 'complete' && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold mb-4">Confirm Purchase Completion</h3>
-            <p className="text-gray-600 mb-2">
-              Are you sure you want to complete this purchase?
-            </p>
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Supplier:</span>
-                  <span className="font-semibold">{formData.supplier}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Items:</span>
-                  <span className="font-semibold">{purchaseItems.length} item{purchaseItems.length !== 1 ? 's' : ''}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Total Amount:</span>
-                  <span className="font-semibold text-green-600">{formatCurrency(calculateGrandTotal())}</span>
-                </div>
-              </div>
-            </div>
-            <p className="text-sm text-gray-500 mb-6">
-              This will update the inventory quantities and cannot be undone easily.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowConfirmDialog(false);
-                  setConfirmAction(null);
-                }}
-                disabled={saving}
-                className={`px-4 py-2 rounded-lg ${
-                  saving
-                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                    : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-                }`}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => completePurchase(false)}
-                disabled={saving}
-                className={`px-4 py-2 rounded-lg ${
-                  saving
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-green-600 text-white hover:bg-green-700'
-                }`}
-              >
-                {saving ? 'Processing...' : 'Confirm & Complete'}
-              </button>
             </div>
           </div>
         </div>
