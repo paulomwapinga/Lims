@@ -236,15 +236,13 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                     <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Financial</th>
                   )}
                   <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Tests</th>
-                  {profile?.role !== 'doctor' && (
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
-                  )}
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-6 py-8 text-center text-sm text-gray-500">Loading...</td>
+                    <td colSpan={profile?.role !== 'doctor' ? 7 : 6} className="px-6 py-8 text-center text-sm text-gray-500">Loading...</td>
                   </tr>
                 ) : (
                   visits.map((visit) => (
@@ -335,18 +333,16 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                           <span className="text-xs text-gray-400 italic">No tests ordered</span>
                         )}
                       </td>
-                      {profile?.role !== 'doctor' && (
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => onViewReceipt(visit.id)}
-                            className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-                            title="View Receipt"
-                          >
-                            <Eye className="w-4 h-4 mr-1.5" />
-                            View
-                          </button>
-                        </td>
-                      )}
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => onViewReceipt(visit.id)}
+                          className="inline-flex items-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                          title="View Receipt"
+                        >
+                          <Eye className="w-4 h-4 mr-1.5" />
+                          View
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
