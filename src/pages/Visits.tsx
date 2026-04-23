@@ -1,4 +1,4 @@
-import { useEffect, useState, FormEvent } from 'react';
+import { useEffect, useState, FormEvent, useRef } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
@@ -124,6 +124,8 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
   const [testQuantities, setTestQuantities] = useState<Record<string, string>>({});
   const [testStockInfo, setTestStockInfo] = useState<Map<string, TestStockInfo>>(new Map());
 
+  const patientSearchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     loadPatients();
     loadTests();
@@ -135,8 +137,28 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
     }
   }, [initialPatientId]);
 
-  async function loadPatients() {
-    const { data } = await supabase.from('patients').select('id, name, phone, age, age_unit, dob').order('name').limit(2000);
+  useEffect(() => {
+    if (patientSearchDebounce.current) clearTimeout(patientSearchDebounce.current);
+    patientSearchDebounce.current = setTimeout(() => {
+      loadPatients(searchTerm);
+    }, 250);
+    return () => {
+      if (patientSearchDebounce.current) clearTimeout(patientSearchDebounce.current);
+    };
+  }, [searchTerm]);
+
+  async function loadPatients(search = '') {
+    const query = supabase
+      .from('patients')
+      .select('id, name, phone, age, age_unit, dob')
+      .order('name')
+      .limit(100);
+
+    if (search.trim()) {
+      query.or(`name.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+
+    const { data } = await query;
     setPatients(data || []);
   }
 
@@ -491,10 +513,7 @@ export default function Visits({ initialPatientId, onViewReceipt }: VisitsProps)
   }
 
   const totals = calculateTotals();
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(searchTerm.toLowerCase()) || p.phone.includes(searchTerm)
-  );
+  const filteredPatients = patients;
 
   return (
     <div className="max-w-6xl mx-auto">
