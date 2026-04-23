@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 import { formatCurrency } from '../lib/currency';
-import { Calendar, User, FileText, Eye, Search, AlertCircle, CheckCircle, Clock } from 'lucide-react';
+import { formatDate as formatDateDDMMYYYY, formatTime } from '../lib/dateFormat';
+import { Calendar, User, FileText, Eye, Search, FlaskConical, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import Pagination from '../components/Pagination';
 
 interface Visit {
@@ -16,17 +17,10 @@ interface Visit {
   balance: number;
   diagnosis: string;
   notes: string;
-  tests_count: number;
-  pending_tests: number;
-  in_progress_tests: number;
-  completed_tests: number;
-}
-
-interface Totals {
-  total_revenue: number;
-  total_collected: number;
-  total_balance: number;
-  total_visits: number;
+  tests_count?: number;
+  pending_tests?: number;
+  in_progress_tests?: number;
+  completed_tests?: number;
 }
 
 interface VisitHistoryProps {
@@ -40,86 +34,118 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totals, setTotals] = useState<Totals>({ total_revenue: 0, total_collected: 0, total_balance: 0, total_visits: 0 });
   const itemsPerPage = 20;
 
-  const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-
   useEffect(() => {
-    if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    searchDebounce.current = setTimeout(() => {
-      setDebouncedSearch(searchTerm);
-      setCurrentPage(1);
-    }, 300);
-    return () => {
-      if (searchDebounce.current) clearTimeout(searchDebounce.current);
-    };
-  }, [searchTerm]);
+    loadVisits();
+  }, []);
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [statusFilter]);
-
-  const loadVisits = useCallback(async () => {
-    setLoading(true);
+  async function loadVisits() {
     try {
-      const offset = (currentPage - 1) * itemsPerPage;
-
-      const [{ data: rows, error }, { data: countData, error: countError }, { data: totalsData, error: totalsError }] = await Promise.all([
-        supabase.rpc('get_visit_history_paginated', {
-          p_search: debouncedSearch,
-          p_status: statusFilter,
-          p_limit: itemsPerPage,
-          p_offset: offset,
-        }),
-        supabase.rpc('get_visit_history_count', {
-          p_search: debouncedSearch,
-          p_status: statusFilter,
-        }),
-        supabase.rpc('get_visit_history_totals', {
-          p_search: debouncedSearch,
-          p_status: statusFilter,
-        }),
-      ]);
+      const { data, error } = await supabase
+        .from('visits')
+        .select(
+          `
+          id,
+          created_at,
+          total,
+          payment_status,
+          paid,
+          balance,
+          diagnosis,
+          notes,
+          patients(name),
+          users(name)
+        `
+        )
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
-      if (countError) throw countError;
-      if (totalsError) throw totalsError;
 
-      setVisits((rows as Visit[]) || []);
-      setTotalItems(Number(countData) || 0);
-      if (totalsData && (totalsData as Totals[]).length > 0) {
-        const t = (totalsData as Totals[])[0];
-        setTotals({
-          total_revenue: Number(t.total_revenue) || 0,
-          total_collected: Number(t.total_collected) || 0,
-          total_balance: Number(t.total_balance) || 0,
-          total_visits: Number(t.total_visits) || 0,
-        });
-      }
+      const visitsWithTests = await Promise.all(
+        data.map(async (v: any) => {
+          const { data: visitTests } = await supabase
+            .from('visit_tests')
+            .select('results_status')
+            .eq('visit_id', v.id);
+
+          const testsCount = visitTests?.length || 0;
+          const pending = visitTests?.filter(vt => vt.results_status === 'pending').length || 0;
+          const inProgress = visitTests?.filter(vt => vt.results_status === 'in_progress').length || 0;
+          const completed = visitTests?.filter(vt => vt.results_status === 'completed').length || 0;
+
+          return {
+            id: v.id,
+            created_at: v.created_at,
+            patient_name: v.patients?.name || 'Unknown',
+            doctor_name: v.users?.name || 'Unknown',
+            total: v.total,
+            payment_status: v.payment_status,
+            paid: v.paid,
+            balance: v.balance,
+            diagnosis: v.diagnosis,
+            notes: v.notes,
+            tests_count: testsCount,
+            pending_tests: pending,
+            in_progress_tests: inProgress,
+            completed_tests: completed,
+          };
+        })
+      );
+
+      setVisits(visitsWithTests);
     } catch (error) {
       console.error('Error loading visits:', error);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, debouncedSearch, statusFilter]);
+  }
+
+  const filteredVisits = visits.filter((visit) => {
+    const matchesSearch =
+      visit.patient_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      visit.doctor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      visit.diagnosis.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus =
+      statusFilter === 'all' || visit.payment_status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalItems = filteredVisits.length;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedVisits = filteredVisits.slice(startIndex, endIndex);
 
   useEffect(() => {
-    loadVisits();
-  }, [loadVisits]);
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  function formatDate(dateString: string) {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  }
 
   function getStatusColor(status: string) {
     switch (status) {
-      case 'paid': return 'bg-green-100 text-green-800';
-      case 'unpaid': return 'bg-red-100 text-red-800';
-      case 'partial': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'paid':
+        return 'bg-green-100 text-green-800';
+      case 'unpaid':
+        return 'bg-red-100 text-red-800';
+      case 'partial':
+        return 'bg-yellow-100 text-yellow-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   }
 
-  if (loading && visits.length === 0) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
@@ -129,6 +155,10 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
       </div>
     );
   }
+
+  const totalRevenue = filteredVisits.reduce((sum, visit) => sum + visit.total, 0);
+  const totalCollected = filteredVisits.reduce((sum, visit) => sum + visit.paid, 0);
+  const totalBalance = filteredVisits.reduce((sum, visit) => sum + visit.balance, 0);
 
   return (
     <div className="space-y-6">
@@ -147,7 +177,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-blue-100 text-sm font-medium">Total Visits</p>
-                <p className="text-3xl font-bold mt-2">{totals.total_visits}</p>
+                <p className="text-3xl font-bold mt-2">{filteredVisits.length}</p>
               </div>
               <Calendar className="w-10 h-10 text-blue-200" />
             </div>
@@ -157,7 +187,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-emerald-100 text-sm font-medium">Total Revenue</p>
-                <p className="text-2xl font-bold mt-2">{formatCurrency(totals.total_revenue)}</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalRevenue)}</p>
               </div>
               <div className="w-10 h-10 bg-emerald-400 rounded-full flex items-center justify-center text-xl font-bold">
                 ₦
@@ -169,7 +199,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-green-100 text-sm font-medium">Collected</p>
-                <p className="text-2xl font-bold mt-2">{formatCurrency(totals.total_collected)}</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalCollected)}</p>
               </div>
               <CheckCircle className="w-10 h-10 text-green-200" />
             </div>
@@ -179,7 +209,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-red-100 text-sm font-medium">Outstanding</p>
-                <p className="text-2xl font-bold mt-2">{formatCurrency(totals.total_balance)}</p>
+                <p className="text-2xl font-bold mt-2">{formatCurrency(totalBalance)}</p>
               </div>
               <AlertCircle className="w-10 h-10 text-red-200" />
             </div>
@@ -213,7 +243,7 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
       </div>
 
       <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-200">
-        {!loading && visits.length === 0 ? (
+        {filteredVisits.length === 0 ? (
           <div className="text-center py-16">
             <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">No visits found</h3>
@@ -228,111 +258,140 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
             <table className="w-full">
               <thead className="bg-gradient-to-r from-gray-50 to-gray-100 border-b-2 border-gray-200">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Date & Time</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Patient</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Doctor</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Diagnosis</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Date & Time
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Patient
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Doctor
+                  </th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Diagnosis
+                  </th>
                   {profile?.role !== 'doctor' && (
-                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Financial</th>
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Financial
+                    </th>
                   )}
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Tests</th>
-                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                    Tests
+                  </th>
+                  {profile?.role !== 'doctor' && (
+                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">
+                      Actions
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {loading ? (
-                  <tr>
-                    <td colSpan={profile?.role !== 'doctor' ? 7 : 6} className="px-6 py-8 text-center text-sm text-gray-500">Loading...</td>
-                  </tr>
-                ) : (
-                  visits.map((visit) => (
-                    <tr key={visit.id} className="hover:bg-blue-50 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                            <Calendar className="w-5 h-5 text-blue-600" />
+                {paginatedVisits.map((visit) => (
+                  <tr key={visit.id} className="hover:bg-blue-50 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                          <Calendar className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div className="ml-3">
+                          <div className="text-sm font-medium text-gray-900">
+                            {new Date(visit.created_at).toLocaleDateString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric'
+                            })}
                           </div>
-                          <div className="ml-3">
-                            <div className="text-sm font-medium text-gray-900">
-                              {new Date(visit.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(visit.created_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-                            </div>
+                          <div className="text-xs text-gray-500">
+                            {new Date(visit.created_at).toLocaleTimeString('en-US', {
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
                           </div>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-                            <User className="w-5 h-5 text-white" />
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                          <User className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="ml-3">
+                          <div className="text-sm font-semibold text-gray-900">
+                            {visit.patient_name}
                           </div>
-                          <div className="ml-3">
-                            <div className="text-sm font-semibold text-gray-900">{visit.patient_name}</div>
-                            <div className="text-xs text-gray-500">ID: {visit.id.slice(0, 8)}</div>
+                          <div className="text-xs text-gray-500">
+                            ID: {visit.id.slice(0, 8)}
                           </div>
                         </div>
-                      </td>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">{visit.doctor_name}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center max-w-xs">
+                        <FileText className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
+                        <span className="text-sm text-gray-700 truncate">
+                          {visit.diagnosis || 'N/A'}
+                        </span>
+                      </div>
+                    </td>
+                    {profile?.role !== 'doctor' && (
                       <td className="px-6 py-4">
-                        <div className="text-sm font-medium text-gray-900">{visit.doctor_name}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center max-w-xs">
-                          <FileText className="w-4 h-4 text-gray-400 mr-2 flex-shrink-0" />
-                          <span className="text-sm text-gray-700 truncate">{visit.diagnosis || 'N/A'}</span>
-                        </div>
-                      </td>
-                      {profile?.role !== 'doctor' && (
-                        <td className="px-6 py-4">
-                          <div className="space-y-1">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Total:</span>
+                            <span className="text-sm font-bold text-gray-900">{formatCurrency(visit.total)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Paid:</span>
+                            <span className="text-sm font-semibold text-green-600">{formatCurrency(visit.paid)}</span>
+                          </div>
+                          {visit.balance > 0 && (
                             <div className="flex items-center justify-between">
-                              <span className="text-xs text-gray-500">Total:</span>
-                              <span className="text-sm font-bold text-gray-900">{formatCurrency(visit.total)}</span>
+                              <span className="text-xs text-gray-500">Balance:</span>
+                              <span className="text-sm font-semibold text-red-600">{formatCurrency(visit.balance)}</span>
                             </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-gray-500">Paid:</span>
-                              <span className="text-sm font-semibold text-green-600">{formatCurrency(visit.paid)}</span>
-                            </div>
-                            {visit.balance > 0 && (
-                              <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-500">Balance:</span>
-                                <span className="text-sm font-semibold text-red-600">{formatCurrency(visit.balance)}</span>
-                              </div>
-                            )}
-                            <div className="pt-1">
-                              <span className={`inline-flex px-2.5 py-0.5 text-xs font-bold rounded-full capitalize ${getStatusColor(visit.payment_status)}`}>
-                                {visit.payment_status}
-                              </span>
-                            </div>
+                          )}
+                          <div className="pt-1">
+                            <span
+                              className={`inline-flex px-2.5 py-0.5 text-xs font-bold rounded-full capitalize ${getStatusColor(
+                                visit.payment_status
+                              )}`}
+                            >
+                              {visit.payment_status}
+                            </span>
                           </div>
-                        </td>
+                        </div>
+                      </td>
+                    )}
+                    <td className="px-6 py-4">
+                      {visit.tests_count ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {visit.pending_tests! > 0 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              {visit.pending_tests} Pending
+                            </span>
+                          )}
+                          {visit.in_progress_tests! > 0 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-100 text-yellow-800 text-xs font-medium">
+                              <Clock className="w-3 h-3 mr-1" />
+                              {visit.in_progress_tests} In Progress
+                            </span>
+                          )}
+                          {visit.completed_tests! > 0 && (
+                            <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-800 text-xs font-medium">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              {visit.completed_tests} Done
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-400 italic">No tests ordered</span>
                       )}
-                      <td className="px-6 py-4">
-                        {visit.tests_count > 0 ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {visit.pending_tests > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-gray-100 text-gray-700 text-xs font-medium">
-                                <AlertCircle className="w-3 h-3 mr-1" />
-                                {visit.pending_tests} Pending
-                              </span>
-                            )}
-                            {visit.in_progress_tests > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-yellow-100 text-yellow-800 text-xs font-medium">
-                                <Clock className="w-3 h-3 mr-1" />
-                                {visit.in_progress_tests} In Progress
-                              </span>
-                            )}
-                            {visit.completed_tests > 0 && (
-                              <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-100 text-green-800 text-xs font-medium">
-                                <CheckCircle className="w-3 h-3 mr-1" />
-                                {visit.completed_tests} Done
-                              </span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-gray-400 italic">No tests ordered</span>
-                        )}
-                      </td>
+                    </td>
+                    {profile?.role !== 'doctor' && (
                       <td className="px-6 py-4">
                         <button
                           onClick={() => onViewReceipt(visit.id)}
@@ -343,9 +402,9 @@ export default function VisitHistory({ onViewReceipt }: VisitHistoryProps) {
                           View
                         </button>
                       </td>
-                    </tr>
-                  ))
-                )}
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
